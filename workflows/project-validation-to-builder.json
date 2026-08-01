@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "name": "project-validation-to-builder",
+  "description": "Validate assigned claims, then build only the approved validated scope.",
+  "explicit_selection_required": true,
+  "roles": ["project-validation", "builder"],
+  "builder_requires_approved_plan_and_budget": true,
+  "automatic_handoff": {
+    "minimum_confidence": "medium",
+    "every_load_bearing_claim_minimum_confidence": "medium",
+    "observable_rubric": "procedures/confidence.md",
+    "requires_current_role_success": true,
+    "preserve": ["evidence_refs", "provenance", "uncertainty"],
+    "stay_within_original_assignment": true
+  },
+  "handoff_never_approves": [
+    "spending",
+    "sensitive access",
+    "destructive behavior",
+    "production deployment",
+    "unrequested product construction"
+  ]
+}

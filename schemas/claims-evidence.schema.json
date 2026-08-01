@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChiiKang/ai-company-os/schemas/claims-evidence.schema.json",
+  "title": "Ranked claims and evidence ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "assignment_id", "run_id", "created_at", "created_by_role", "claims", "evidence", "tags"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^ce_[A-Za-z0-9_-]{8,64}$"},
+    "assignment_id": {"type": "string", "pattern": "^asn_[A-Za-z0-9_-]{8,64}$"},
+    "run_id": {"type": "string", "pattern": "^run_[A-Za-z0-9_-]{8,64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "created_by_role": {"enum": ["research", "project-validation", "idea-validation", "builder"]},
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "rank", "statement", "source_kind", "industry", "measurable_test", "evidence_refs", "uncertainty"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^claim_[A-Za-z0-9_-]{4,64}$"},
+          "rank": {"type": "integer", "minimum": 1, "maximum": 5},
+          "statement": {"type": "string", "minLength": 1},
+          "source_kind": {"enum": ["repository", "paper", "model", "technology", "product", "other"]},
+          "industry": {"enum": ["software", "ai", "biotechnology", "manufacturing", "chemicals", "other"]},
+          "measurable_test": {"type": "string", "minLength": 1},
+          "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "uncertainty": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "evidence_type", "relationship", "source_uri", "source_title", "publication_date", "retrieved_at", "primary_source", "observation", "provenance", "uncertainty"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^ev_[A-Za-z0-9_-]{4,64}$"},
+          "evidence_type": {"enum": ["primary-source", "secondary-source", "repository", "dataset", "benchmark", "test-output", "observation"]},
+          "relationship": {"enum": ["supports", "contradicts", "context"]},
+          "source_uri": {"type": "string", "format": "uri"},
+          "source_title": {"type": "string", "minLength": 1},
+          "publication_date": {"type": "string", "format": "date"},
+          "retrieved_at": {"type": "string", "format": "date-time"},
+          "primary_source": {"type": "boolean"},
+          "observation": {"type": "string", "minLength": 1},
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["collector", "method", "content_sha256"],
+            "properties": {
+              "collector": {"type": "string", "minLength": 1},
+              "method": {"type": "string", "minLength": 1},
+              "content_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+            }
+          },
+          "uncertainty": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "tags": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}
