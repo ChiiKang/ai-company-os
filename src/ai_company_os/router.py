@@ -17,6 +17,10 @@ from .store import KnowledgeStore
 from .validator import validate_document
 
 CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
+MIGRATION_KEY = "workflow_contract_migration"
+MIGRATION_FIELDS = frozenset(
+    {"approval_id", "stored_schema_version", "stored_sha256", "current_schema_version", "current_sha256"}
+)
 
 
 def now_utc() -> str:
@@ -47,6 +51,12 @@ def _verify_checkpoint(run: dict) -> None:
         raise PolicyError("run checkpoint identity mismatch; inspect and recover before continuing")
 
 
+CONTRACT_DRIFT_WARNING = (
+    "the workflow contract changed after this run was checkpointed; no further work is executed until "
+    "run resume attests the stored and current contract identities with a captain migration approval"
+)
+
+
 def _workflow_identity(name: str | None) -> dict | None:
     if not name:
         return None
@@ -56,19 +66,35 @@ def _workflow_identity(name: str | None) -> dict | None:
         raise PolicyError(f"the workflow contract this run was checkpointed against is unusable: {exc}") from exc
 
 
-def inspect_run(store: KnowledgeStore, run_id: str, *, allow_contract_migration: bool = False) -> dict:
+def _loadable_workflow_identity(run: dict) -> dict | None:
+    try:
+        return _workflow_identity(run.get("workflow"))
+    except PolicyError:
+        return None
+
+
+def workflow_contract_drift(run: dict) -> dict | None:
+    """Report a stored/current workflow contract mismatch without changing anything."""
+    stored = run["recovery_identity"].get("workflow_contract")
+    current = _loadable_workflow_identity(run)
+    if stored == current:
+        return None
+    return {"stored": stored, "current": current, "warning": CONTRACT_DRIFT_WARNING}
+
+
+def _require_current_workflow_contract(run: dict) -> None:
+    drift = workflow_contract_drift(run)
+    if drift:
+        raise PolicyError(drift["warning"])
+
+
+def inspect_run(store: KnowledgeStore, run_id: str) -> dict:
+    """Read-only verification; contract drift is reported by `workflow_contract_drift`."""
     run = store.load_run(run_id)
     _verify_checkpoint(run)
     assignment = store.load_assignment(run["assignment_id"])
     if _hash(assignment) != run["assignment_sha256"]:
         raise PolicyError("assignment identity changed after run creation")
-    if not allow_contract_migration and _workflow_identity(run.get("workflow")) != run["recovery_identity"].get(
-        "workflow_contract"
-    ):
-        raise PolicyError(
-            "workflow contract identity changed after run creation; "
-            "resume with an explicit safe migration approval before continuing"
-        )
     return run
 
 
@@ -141,6 +167,7 @@ def _apply_pregrant(assignment: dict, run: dict, event: dict) -> dict:
 
 def add_loop_event(store: KnowledgeStore, run_id: str, event: dict) -> dict:
     run = inspect_run(store, run_id)
+    _require_current_workflow_contract(run)
     if run["status"] in {"complete", "stopped", "awaiting-handoff"}:
         raise PolicyError(f"run status {run['status']!r} does not accept loop events")
     assignment = store.load_assignment(run["assignment_id"])
@@ -172,26 +199,45 @@ def add_loop_event(store: KnowledgeStore, run_id: str, event: dict) -> dict:
 
 
 def _migrate_workflow_contract(run: dict, attestation: dict) -> None:
-    snapshot = run["recovery_identity"].get("workflow_contract")
-    current = _workflow_identity(run.get("workflow"))
-    if current == snapshot:
+    drift = workflow_contract_drift(run)
+    migration = attestation.get(MIGRATION_KEY)
+    if drift is None:
+        if migration is not None:
+            raise PolicyError("the attested workflow contract migration does not apply; the contract is unchanged")
         return
-    approval_id = str(attestation.get("workflow_contract_migration_approval_id") or "").strip()
-    if not approval_id:
-        raise PolicyError(
-            "the workflow contract changed since this checkpoint; "
-            "resume requires an explicit safe migration approval id"
+    if migration is None:
+        raise PolicyError(CONTRACT_DRIFT_WARNING)
+    if not isinstance(migration, dict) or set(migration) != MIGRATION_FIELDS:
+        raise ContractError(
+            "resuming a changed workflow contract requires a "
+            f"{MIGRATION_KEY} attestation naming exactly {sorted(MIGRATION_FIELDS)}"
         )
-    if snapshot is None or current is None or current["name"] != snapshot["name"] or current["roles"] != snapshot["roles"]:
+    if any(not isinstance(migration[key], str) or not migration[key].strip() for key in MIGRATION_FIELDS):
+        raise ContractError("workflow contract migration fields must be non-empty strings")
+    stored, current = drift["stored"], drift["current"]
+    if stored is None or current is None:
+        raise PolicyError(
+            "a workflow contract migration needs both the stored and the currently loadable contract identity"
+        )
+    if (migration["stored_schema_version"], migration["stored_sha256"]) != (stored["schema_version"], stored["sha256"]):
+        raise PolicyError("the attested stored workflow contract identity does not match this run's checkpoint")
+    if (migration["current_schema_version"], migration["current_sha256"]) != (
+        current["schema_version"],
+        current["sha256"],
+    ):
+        raise PolicyError("the attested current workflow contract identity does not match the loaded contract")
+    if current["name"] != stored["name"] or current["roles"] != stored["roles"]:
         raise PolicyError("a workflow contract migration cannot change the run's workflow identity or declared route")
     for key in ("minimum_confidence", "minimum_claim_confidence"):
-        if CONFIDENCE[current[key]] < CONFIDENCE[snapshot[key]]:
+        if CONFIDENCE[current[key]] < CONFIDENCE[stored[key]]:
             raise PolicyError("a workflow contract migration cannot lower a declared handoff confidence floor")
     run["recovery_identity"]["workflow_contract"] = current
     run.setdefault("workflow_contract_migrations", []).append(
         {
-            "approval_id": approval_id,
-            "from_sha256": snapshot["sha256"],
+            "approval_id": migration["approval_id"].strip(),
+            "from_schema_version": stored["schema_version"],
+            "from_sha256": stored["sha256"],
+            "to_schema_version": current["schema_version"],
             "to_sha256": current["sha256"],
             "migrated_at": now_utc(),
         }
@@ -199,7 +245,7 @@ def _migrate_workflow_contract(run: dict, attestation: dict) -> None:
 
 
 def resume_run(store: KnowledgeStore, run_id: str, attestation: dict) -> dict:
-    run = inspect_run(store, run_id, allow_contract_migration=True)
+    run = inspect_run(store, run_id)
     required = {
         "run_id",
         "checkpoint_sha256",
@@ -208,11 +254,10 @@ def resume_run(store: KnowledgeStore, run_id: str, attestation: dict) -> dict:
         "approval_ids",
         "artifact_refs",
     }
-    optional = {"workflow_contract_migration_approval_id"}
-    if not isinstance(attestation, dict) or not required <= set(attestation) or set(attestation) - required - optional:
+    if not isinstance(attestation, dict) or not required <= set(attestation) or set(attestation) - required - {MIGRATION_KEY}:
         raise ContractError(
             "resume attestation must contain exactly the v1 recovery identity fields, "
-            "plus an optional workflow contract migration approval id"
+            f"plus an optional {MIGRATION_KEY} object"
         )
     if any(not isinstance(attestation[key], str) or not attestation[key] for key in ("run_id", "checkpoint_sha256", "source_identity", "environment_identity")):
         raise ContractError("resume identity and checkpoint fields must be non-empty strings")
@@ -243,6 +288,7 @@ def resume_run(store: KnowledgeStore, run_id: str, attestation: dict) -> dict:
 def advance_handoff(store: KnowledgeStore, run_id: str, handoff: dict) -> dict:
     validate_document("handoff", handoff)
     run = inspect_run(store, run_id)
+    _require_current_workflow_contract(run)
     assignment = store.load_assignment(run["assignment_id"])
     if not assignment.get("workflow"):
         raise PolicyError("independent role assignments never hand off automatically")

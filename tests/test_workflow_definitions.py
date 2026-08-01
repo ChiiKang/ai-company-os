@@ -1,15 +1,24 @@
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
-from ai_company_os import definitions
+from ai_company_os import cli, definitions
 from ai_company_os.definitions import ROLES, load_workflows, workflow, workflow_names, workflows_directory
 from ai_company_os.errors import AICompanyOSError, ApprovalRequired, ContractError, PolicyError
 from ai_company_os.policy import APPROVAL_BOUNDARY_CATEGORIES, APPROVAL_OPERATIONS
-from ai_company_os.router import add_loop_event, advance_handoff, create_run, inspect_run, resume_run
+from ai_company_os.router import (
+    add_loop_event,
+    advance_handoff,
+    create_run,
+    inspect_run,
+    resume_run,
+    workflow_contract_drift,
+)
 from ai_company_os.store import KnowledgeStore
 from ai_company_os.validator import SCHEMAS, generated_enum_drift, load_schema, schemas_directory
 
@@ -278,6 +287,26 @@ class ContractIdentityTests(unittest.TestCase):
             **extra,
         }
 
+    def migration(self, **overrides) -> dict:
+        stored = self.run["recovery_identity"]["workflow_contract"]
+        current = definitions.workflows()[WORKFLOW].identity()
+        payload = {
+            "approval_id": "captain-migration-1",
+            "stored_schema_version": stored["schema_version"],
+            "stored_sha256": stored["sha256"],
+            "current_schema_version": current["schema_version"],
+            "current_sha256": current["sha256"],
+        }
+        payload.update(overrides)
+        return payload
+
+    def cli_inspect(self) -> dict:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = cli.main(["--root", self.temporary.name, "run", "inspect", "--run", self.run["id"]])
+        self.assertEqual(0, code)
+        return json.loads(buffer.getvalue())
+
     def test_contract_version_and_digest_are_bound_into_the_checkpoint(self):
         snapshot = self.run["recovery_identity"]["workflow_contract"]
         contract = self.original[WORKFLOW]
@@ -292,16 +321,57 @@ class ContractIdentityTests(unittest.TestCase):
         self.assertIsNone(run["recovery_identity"]["workflow_contract"])
         self.assertEqual(run["checkpoint"], inspect_run(self.store, run["id"])["checkpoint"])
 
-    def test_changed_contract_stops_an_in_flight_run(self):
+    def test_changed_contract_stops_execution_but_not_inspection(self):
         self.change_contract()
-        with self.assertRaises(PolicyError):
-            inspect_run(self.store, self.run["id"])
+        inspected = inspect_run(self.store, self.run["id"])
+        self.assertEqual(self.run["checkpoint"], inspected["checkpoint"])
+        drift = workflow_contract_drift(inspected)
+        self.assertEqual(self.original[WORKFLOW].digest, drift["stored"]["sha256"])
+        self.assertEqual("f" * 64, drift["current"]["sha256"])
+        self.assertIn("run resume", drift["warning"])
         with self.assertRaises(PolicyError):
             add_loop_event(
                 self.store,
                 self.run["id"],
                 {"phase": "plan", "duration_minutes": 1, "summary": "plan", "usage": ZERO_USAGE},
             )
+        self.assertEqual(
+            self.original[WORKFLOW].digest,
+            self.store.load_run(self.run["id"])["recovery_identity"]["workflow_contract"]["sha256"],
+        )
+
+    def test_inspect_reports_both_contract_identities_for_the_migration_attestation(self):
+        self.change_contract()
+        reported = self.cli_inspect()
+        contract = reported["workflow_contract"]
+        self.assertEqual(self.original[WORKFLOW].digest, contract["stored"]["sha256"])
+        self.assertEqual("f" * 64, contract["current"]["sha256"])
+        self.assertIsNotNone(contract["drift_warning"])
+        identity = reported["recovery_identity"]
+        resumed = resume_run(
+            self.store,
+            self.run["id"],
+            {
+                "run_id": self.run["id"],
+                "checkpoint_sha256": reported["checkpoint"]["state_sha256"],
+                "source_identity": identity["source_identity"],
+                "environment_identity": identity["environment_identity"],
+                "approval_ids": identity["approval_ids"],
+                "artifact_refs": identity["artifact_refs"],
+                "workflow_contract_migration": {
+                    "approval_id": "captain-migration-1",
+                    "stored_schema_version": contract["stored"]["schema_version"],
+                    "stored_sha256": contract["stored"]["sha256"],
+                    "current_schema_version": contract["current"]["schema_version"],
+                    "current_sha256": contract["current"]["sha256"],
+                },
+            },
+        )
+        migration = resumed["workflow_contract_migrations"][0]
+        self.assertEqual("captain-migration-1", migration["approval_id"])
+        self.assertEqual(self.original[WORKFLOW].digest, migration["from_sha256"])
+        self.assertEqual("f" * 64, migration["to_sha256"])
+        self.assertIsNone(self.cli_inspect()["workflow_contract"]["drift_warning"])
 
     def test_resume_refuses_a_changed_contract_without_an_explicit_migration(self):
         self.change_contract()
@@ -310,28 +380,38 @@ class ContractIdentityTests(unittest.TestCase):
 
     def test_resume_accepts_an_explicit_safe_migration_and_rebinds_identity(self):
         self.change_contract()
-        resumed = resume_run(
-            self.store, self.run["id"], self.attestation(workflow_contract_migration_approval_id="captain-migration-1")
-        )
+        resumed = resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
         migration = resumed["workflow_contract_migrations"][0]
-        self.assertEqual("captain-migration-1", migration["approval_id"])
-        self.assertEqual(self.original[WORKFLOW].digest, migration["from_sha256"])
+        self.assertEqual(self.original[WORKFLOW].schema_version, migration["from_schema_version"])
         self.assertEqual("f" * 64, resumed["recovery_identity"]["workflow_contract"]["sha256"])
-        self.assertEqual(resumed["checkpoint"], inspect_run(self.store, self.run["id"])["checkpoint"])
+        self.assertIsNone(workflow_contract_drift(inspect_run(self.store, self.run["id"])))
+
+    def test_migration_must_name_the_exact_stored_and_current_identities(self):
+        self.change_contract()
+        for wrong in ({"stored_sha256": "a" * 64}, {"current_sha256": "b" * 64}, {"current_schema_version": "9.9"}):
+            with self.subTest(wrong=sorted(wrong)):
+                with self.assertRaises(PolicyError):
+                    resume_run(
+                        self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration(**wrong))
+                    )
+        incomplete = self.migration()
+        del incomplete["current_sha256"]
+        with self.assertRaises(ContractError):
+            resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=incomplete))
+
+    def test_migration_attestation_without_drift_is_refused(self):
+        with self.assertRaises(PolicyError):
+            resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
 
     def test_migration_cannot_weaken_the_declared_confidence_floor(self):
         self.change_contract(minimum_claim_confidence="low")
         with self.assertRaises(PolicyError):
-            resume_run(
-                self.store, self.run["id"], self.attestation(workflow_contract_migration_approval_id="captain-migration-1")
-            )
+            resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
 
     def test_migration_cannot_change_the_declared_route(self):
         self.change_contract(roles=("research", "project-validation"))
         with self.assertRaises(AICompanyOSError):
-            resume_run(
-                self.store, self.run["id"], self.attestation(workflow_contract_migration_approval_id="captain-migration-1")
-            )
+            resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
         self.assertEqual(["research", "idea-validation"], self.store.load_run(self.run["id"])["roles"])
 
     def test_unknown_attestation_fields_are_still_refused(self):

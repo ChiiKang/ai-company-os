@@ -13,7 +13,7 @@ from .definitions import ROLES, selected_roles, workflow as workflow_contract, w
 from .errors import AICompanyOSError, ContractError
 from .paths import reject_public_report_source, reject_raw_secrets
 from .policy import APPROVAL_OPERATIONS, assess_operation, build_composite_budget
-from .router import add_loop_event, advance_handoff, create_run, inspect_run, resume_run
+from .router import add_loop_event, advance_handoff, create_run, inspect_run, resume_run, workflow_contract_drift
 from .sandbox import validate_untrusted_execution
 from .store import KnowledgeStore, PRIVATE_REPORT_MARKER
 from .validator import SCHEMAS, validate_document
@@ -185,6 +185,8 @@ def command_run_event(args: argparse.Namespace) -> int:
 
 def command_run_inspect(args: argparse.Namespace) -> int:
     run = inspect_run(KnowledgeStore(args.root), args.run)
+    stored_contract = run["recovery_identity"].get("workflow_contract")
+    drift = workflow_contract_drift(run)
     emit(
         {
             "run_id": run["id"],
@@ -197,6 +199,11 @@ def command_run_inspect(args: argparse.Namespace) -> int:
             "checkpoint": run["checkpoint"],
             "recovery_identity": run["recovery_identity"],
             "carried_uncertainty": run.get("carried_uncertainty", []),
+            "workflow_contract": {
+                "stored": stored_contract,
+                "current": drift["current"] if drift else stored_contract,
+                "drift_warning": drift["warning"] if drift else None,
+            },
         }
     )
     return 0
