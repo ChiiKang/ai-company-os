@@ -29,8 +29,8 @@ Set `AI_COMPANY_OS_KNOWLEDGE_ROOT` or pass global `--root PATH` to choose privat
 ```text
 roles/          public role contracts
 procedures/     reusable intake, evidence, planning, design, integration, acceptance
-workflows/      optional explicit compositions
-schemas/        strict assignment and artifact JSON contracts
+workflows/      optional explicit compositions, loaded at runtime as the only workflow authority
+schemas/        strict assignment, workflow, and artifact JSON contracts
 docs/           stable external integration contract
 src/            policy, routing, loop, validation, private storage, vault boundary
 bin/            standalone CLI
@@ -150,9 +150,9 @@ Start any returned assignment independently:
   --criterion "research evidence" --criterion "idea recommendation"
 ```
 
-Available workflows are `research-to-idea-validation`, `research-to-project-validation`, and `project-validation-to-builder`. Any workflow containing Project Validation requires explicit `--source-identity` and `--environment-identity`; the Builder workflow additionally requires `--builder-budget-minutes` and `--approved-plan-id`.
+Available workflows are `research-to-idea-validation`, `research-to-project-validation`, and `project-validation-to-builder`. Each one is defined only by its `workflows/<name>.json` contract, validated against `schemas/workflow.schema.json` and loaded at runtime; the code holds no second copy, so adding or editing a contract file changes routing, the accepted CLI selections, and the handoff confidence floor. Any workflow containing Project Validation requires explicit `--source-identity` and `--environment-identity`; the Builder workflow additionally requires `--builder-budget-minutes` and `--approved-plan-id`.
 
-An automatic handoff is accepted only after current-role measurable success, within the original workflow route, at observable `medium` or `high` confidence, with evidence references, provenance hashes, and uncertainty. Every load-bearing claim must independently meet medium confidence with linked evidence; unsupported numeric self-scoring fails. The rubric is in `procedures/confidence.md`. Handoffs never approve spending, sensitive access, destructive behavior, production deployment, or unrequested construction.
+An automatic handoff is accepted only after current-role measurable success, within the original workflow route, at the confidence floor declared by the workflow contract (`medium` or `high`), with evidence references, provenance hashes, and uncertainty. Every load-bearing claim must independently meet medium confidence with linked evidence; unsupported numeric self-scoring fails. The rubric is in `procedures/confidence.md`. Handoffs never approve spending, sensitive access, destructive behavior, production deployment, or unrequested construction.
 
 ## Artifacts and reports
 
@@ -200,4 +200,4 @@ AI Company OS never gets, stores, logs, echoes, or asks for the raw value.
 ./scripts/test.sh
 ```
 
-This runs Python `unittest` plus the public-safety scan. No global package changes are required. Public changes must pass automated review/tests, use a pull request, and wait for captain approval; do not merge without it.
+This runs Python `unittest` plus the public-safety scan. No global package changes are required. The same command is the whole CI job in `.github/workflows/ci.yml`, which runs on every pull request and on pushes to `main`. Public changes must pass automated review/tests, use a pull request, and wait for captain approval; do not merge without it.

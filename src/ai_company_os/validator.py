@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .definitions import assignment_roles
+from .definitions import ROLES, assignment_roles, workflow_names
 from .errors import ContractError
 from .paths import public_repo_root
 
@@ -18,6 +18,14 @@ SCHEMAS = {
     "experiment": "experiment.schema.json",
     "handoff": "handoff.schema.json",
     "decision-report": "decision-report.schema.json",
+    "workflow": "workflow.schema.json",
+}
+
+# Enumerations whose members are owned by a registry rather than by the schema file,
+# so a contract never carries a second copy of the runtime authority.
+DYNAMIC_ENUM_SOURCES = {
+    "role-names": lambda: list(ROLES),
+    "workflow-names": lambda: list(workflow_names()),
 }
 
 
@@ -114,14 +122,30 @@ def _validate(schema: dict, value: Any, path: str, errors: list[str]) -> None:
             errors.append(f"{path}: must be at most {schema['maximum']}")
 
 
+def _resolve_dynamic_enums(node: Any, kind: str) -> Any:
+    if isinstance(node, dict):
+        source = node.get("enumSource")
+        if source is None:
+            return {name: _resolve_dynamic_enums(item, kind) for name, item in node.items()}
+        if source not in DYNAMIC_ENUM_SOURCES:
+            raise ContractError(f"{kind} schema names unknown enum source {source!r}")
+        if kind == "workflow" and source == "workflow-names":
+            raise ContractError("the workflow contract cannot depend on the registry it defines")
+        return {"type": "string", "enum": DYNAMIC_ENUM_SOURCES[source]()}
+    if isinstance(node, list):
+        return [_resolve_dynamic_enums(item, kind) for item in node]
+    return node
+
+
 def load_schema(kind: str, schemas_dir: str | Path | None = None) -> dict:
     if kind not in SCHEMAS:
         raise ContractError(f"unknown artifact type {kind!r}; choose from {', '.join(SCHEMAS)}")
     root = Path(schemas_dir) if schemas_dir else public_repo_root() / "schemas"
     try:
-        return json.loads((root / SCHEMAS[kind]).read_text(encoding="utf-8"))
+        schema = json.loads((root / SCHEMAS[kind]).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError(f"cannot load schema for {kind}: {exc}") from exc
+    return _resolve_dynamic_enums(schema, kind)
 
 
 def _check_confidence(document: dict, errors: list[str]) -> None:

@@ -8,7 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from .definitions import assignment_roles
+from .definitions import assignment_roles, workflow as workflow_contract
 from .errors import ContractError, PolicyError
 from .knowledge import knowledge_markdown, lexical_lookup
 from .loop import new_loop, record_event
@@ -191,6 +191,7 @@ def advance_handoff(store: KnowledgeStore, run_id: str, handoff: dict) -> dict:
     assignment = store.load_assignment(run["assignment_id"])
     if not assignment.get("workflow"):
         raise PolicyError("independent role assignments never hand off automatically")
+    contract = workflow_contract(assignment["workflow"])
     if run["status"] != "awaiting-handoff":
         raise PolicyError("handoff requires measurable success from the current role")
     if handoff["assignment_id"] != assignment["id"] or handoff["run_id"] != run["id"]:
@@ -199,10 +200,15 @@ def advance_handoff(store: KnowledgeStore, run_id: str, handoff: dict) -> dict:
         raise PolicyError("handoff workflow is outside the captain's original assignment")
     if handoff["automatic"] is not True or handoff["requested_by_original_assignment"] is not True:
         raise PolicyError("automatic handoff must be explicitly authorized by the original workflow assignment")
-    if CONFIDENCE[handoff["confidence"]["level"]] < CONFIDENCE["medium"]:
-        raise PolicyError("automatic handoff requires medium confidence or higher")
-    if any(CONFIDENCE[item["confidence"]] < CONFIDENCE["medium"] for item in handoff["load_bearing_claims"]):
-        raise PolicyError("every load-bearing handoff claim requires medium confidence and evidence")
+    if CONFIDENCE[handoff["confidence"]["level"]] < CONFIDENCE[contract.minimum_confidence]:
+        raise PolicyError(f"automatic handoff requires {contract.minimum_confidence} confidence or higher")
+    if any(
+        CONFIDENCE[item["confidence"]] < CONFIDENCE[contract.minimum_claim_confidence]
+        for item in handoff["load_bearing_claims"]
+    ):
+        raise PolicyError(
+            f"every load-bearing handoff claim requires {contract.minimum_claim_confidence} confidence and evidence"
+        )
     if handoff["approval_boundaries_triggered"]:
         raise PolicyError("approval-boundary work cannot be authorized by a handoff")
 

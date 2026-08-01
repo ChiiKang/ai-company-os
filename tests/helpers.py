@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from ai_company_os.definitions import WORKFLOWS
+from ai_company_os.definitions import workflow as workflow_contract
 from ai_company_os.policy import build_composite_budget
 
 
@@ -13,7 +13,7 @@ def now() -> str:
 
 def assignment(selection: dict, **policy_kwargs) -> dict:
     assignment_id = f"asn_{uuid4().hex[:12]}"
-    roles = (selection["name"],) if selection["type"] == "role" else WORKFLOWS[selection["name"]].roles
+    roles = (selection["name"],) if selection["type"] == "role" else workflow_contract(selection["name"]).roles
     role = roles[0]
     document = {
         "schema_version": "ai-company.assignment.v1",

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from .definitions import ROLES, WORKFLOWS, selected_roles
+from .definitions import ROLES, selected_roles, workflow as workflow_contract, workflow_names
 from .errors import AICompanyOSError, ContractError
 from .paths import reject_public_report_source, reject_raw_secrets
 from .policy import APPROVAL_OPERATIONS, assess_operation, build_composite_budget
@@ -86,7 +86,7 @@ def command_assignment_create(args: argparse.Namespace) -> int:
     ):
         raise ContractError("Project Validation assignments require explicit source and isolated-environment identities")
     assignment_id = f"asn_{uuid4().hex[:16]}"
-    role = args.role or WORKFLOWS[args.workflow].roles[0]
+    role = args.role or workflow_contract(args.workflow).roles[0]
     assignment = {
         "schema_version": "ai-company.assignment.v1",
         "id": assignment_id,
@@ -275,7 +275,7 @@ def build_parser() -> argparse.ArgumentParser:
     create = assignment_commands.add_parser("create")
     selection = create.add_mutually_exclusive_group(required=True)
     selection.add_argument("--role", choices=ROLES)
-    selection.add_argument("--workflow", choices=sorted(WORKFLOWS))
+    selection.add_argument("--workflow", choices=list(workflow_names()))
     create.add_argument("--title", required=True)
     create.add_argument("--outcome", required=True, help="outcome requested by the captain")
     create.add_argument("--goal", required=True, help="measurable goal statement")

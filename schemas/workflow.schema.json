@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChiiKang/ai-company-os/schemas/workflow.schema.json",
+  "title": "ai-company.workflow.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "description", "explicit_selection_required", "roles", "automatic_handoff", "handoff_never_approves"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "name": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "description": {"type": "string", "minLength": 1},
+    "explicit_selection_required": {"const": true},
+    "roles": {"type": "array", "minItems": 2, "maxItems": 4, "uniqueItems": true, "items": {"enumSource": "role-names"}},
+    "builder_requires_approved_plan_and_budget": {"const": true},
+    "automatic_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_confidence", "every_load_bearing_claim_minimum_confidence", "observable_rubric", "requires_current_role_success", "preserve", "stay_within_original_assignment"],
+      "properties": {
+        "minimum_confidence": {"enum": ["medium", "high"]},
+        "every_load_bearing_claim_minimum_confidence": {"enum": ["medium", "high"]},
+        "observable_rubric": {"const": "procedures/confidence.md"},
+        "requires_current_role_success": {"const": true},
+        "preserve": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["evidence_refs", "provenance", "uncertainty"]}},
+        "stay_within_original_assignment": {"const": true}
+      }
+    },
+    "handoff_never_approves": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}

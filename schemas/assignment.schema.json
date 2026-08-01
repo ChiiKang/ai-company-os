@@ -11,8 +11,8 @@
     "created_at": {"type": "string", "format": "date-time"},
     "title": {"type": "string", "minLength": 1},
     "requested_outcome": {"type": "string", "minLength": 1},
-    "role": {"enum": ["research", "project-validation", "idea-validation", "builder"]},
-    "workflow": {"enum": ["research-to-idea-validation", "research-to-project-validation", "project-validation-to-builder"]},
+    "role": {"enumSource": "role-names"},
+    "workflow": {"enumSource": "workflow-names"},
     "measurable_goal": {
       "type": "object",
       "additionalProperties": false,

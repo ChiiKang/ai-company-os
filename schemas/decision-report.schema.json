@@ -11,7 +11,7 @@
     "assignment_id": {"type": "string", "pattern": "^asn_[A-Za-z0-9_-]{8,64}$"},
     "run_id": {"type": "string", "pattern": "^run_[A-Za-z0-9_-]{8,64}$"},
     "created_at": {"type": "string", "format": "date-time"},
-    "role": {"enum": ["research", "project-validation", "idea-validation", "builder"]},
+    "role": {"enumSource": "role-names"},
     "title": {"type": "string", "minLength": 1},
     "summary": {"type": "string", "minLength": 1},
     "decision": {"enum": ["research complete", "confirmed", "partially confirmed", "contradicted", "could not attempt", "could not reproduce", "works but impractical", "promising but more evidence required", "proceed", "modify", "test further", "reject", "acceptance met", "unmet criteria"]},
