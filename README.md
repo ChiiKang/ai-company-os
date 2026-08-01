@@ -30,11 +30,11 @@ Set `AI_COMPANY_OS_KNOWLEDGE_ROOT` or pass global `--root PATH` to choose privat
 roles/          public role contracts
 procedures/     reusable intake, evidence, planning, design, integration, acceptance
 workflows/      optional explicit compositions, loaded at runtime as the only workflow authority
-schemas/        strict assignment, workflow, and artifact JSON contracts
+schemas/        strict standard JSON Schema assignment, workflow, and artifact contracts
 docs/           stable external integration contract
 src/            policy, routing, loop, validation, private storage, vault boundary
 bin/            standalone CLI
-scripts/        reproducible tests and public-safety check
+scripts/        reproducible tests, generated schema enum sync, and public-safety check
 tests/          unit and end-to-end local workflow tests
 ```
 
@@ -152,7 +152,9 @@ Start any returned assignment independently:
 
 Available workflows are `research-to-idea-validation`, `research-to-project-validation`, and `project-validation-to-builder`. Each one is defined only by its `workflows/<name>.json` contract, validated against `schemas/workflow.schema.json` and loaded at runtime; the code holds no second copy, so adding or editing a contract file changes routing, the accepted CLI selections, and the handoff confidence floor. Any workflow containing Project Validation requires explicit `--source-identity` and `--environment-identity`; the Builder workflow additionally requires `--builder-budget-minutes` and `--approved-plan-id`.
 
-An automatic handoff is accepted only after current-role measurable success, within the original workflow route, at the confidence floor declared by the workflow contract (`medium` or `high`), with evidence references, provenance hashes, and uncertainty. Every load-bearing claim must independently meet medium confidence with linked evidence; unsupported numeric self-scoring fails. The rubric is in `procedures/confidence.md`. Handoffs never approve spending, sensitive access, destructive behavior, production deployment, or unrequested construction.
+An automatic handoff is accepted only after current-role measurable success, within the original workflow route, at the confidence floor declared by the workflow contract (`medium` or `high`), with evidence references, provenance hashes, and uncertainty. Every load-bearing claim must independently meet the declared claim floor with linked evidence; unsupported numeric self-scoring fails. The rubric is in `procedures/confidence.md`. Each field the contract lists under `automatic_handoff.preserve` must be present and is carried forward: preserved evidence and provenance become part of the run's immutable artifact identity, and preserved uncertainty is returned as `carried_uncertainty` for the downstream role.
+
+Handoffs never approve what the contract lists in `handoff_never_approves` (spending, sensitive access, destructive behavior, production deployment, unrequested product construction). Any triggered approval boundary blocks the handoff, and once a run has advanced automatically, an assignment pre-grant in a never-approved category is no longer applied implicitly; the downstream event must carry the captain's approval identifier.
 
 ## Artifacts and reports
 
@@ -171,7 +173,7 @@ Decision reports are readable Markdown with Mermaid; metadata enables validation
 
 Each phase accounts for wall-clock minutes, model tokens, monetary cost, tool calls, and download bytes. The first ceiling stops work. Unknown usage remains `unknown` and stops—it is not treated as free. Paid usage defaults to zero until a positive monetary ceiling and operation approval are recorded. Role wall-clock defaults remain 120/240/120 minutes; Builder derives its ceiling from an approved plan.
 
-Each phase is atomically checkpointed. `run inspect --run ID` verifies state and assignment identity. After interruption, `run resume --run ID --attestation /private/recovery.json` compares checkpoint, source, environment, approval, and immutable artifact identities before continuing; it cannot revive a terminal/resource-exhausted run.
+Each phase is atomically checkpointed. `run inspect --run ID` verifies state and assignment identity. A workflow run additionally binds the selected contract's version, digest, route, and confidence floors into that identity, so editing the contract file mid-run stops the run instead of silently changing its gates. After interruption, `run resume --run ID --attestation /private/recovery.json` compares checkpoint, source, environment, approval, and immutable artifact identities before continuing; it cannot revive a terminal/resource-exhausted run. A changed workflow contract resumes only with an explicit `workflow_contract_migration_approval_id` in the attestation, and only when the workflow identity and route are unchanged and no confidence floor is lowered.
 
 ## Boundaries, hostile code, and secrets
 

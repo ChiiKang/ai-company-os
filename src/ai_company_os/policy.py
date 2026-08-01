@@ -2,22 +2,27 @@
 
 from dataclasses import dataclass
 
-from .definitions import DEFAULT_BUDGETS_MINUTES, selected_roles
+from .definitions import DEFAULT_BUDGETS_MINUTES, selected_roles, workflow
 from .errors import PolicyError
 
-APPROVAL_OPERATIONS = frozenset(
-    {
-        "paid-api",
-        "cloud-resource",
-        "large-download",
-        "protected-credential",
-        "security-sensitive",
-        "destructive",
-        "production-deployment",
-        "unrequested-product-construction",
-        "experiment-network",
-    }
-)
+# The single approval vocabulary shared by the operation gate, the public artifact
+# schemas, and every workflow contract's `handoff_never_approves` declaration.
+APPROVAL_BOUNDARY_CATEGORIES = {
+    "spending": ("paid-api", "cloud-resource"),
+    "sensitive access": ("protected-credential", "security-sensitive", "experiment-network"),
+    "large download": ("large-download",),
+    "destructive behavior": ("destructive",),
+    "production deployment": ("production-deployment",),
+    "unrequested product construction": ("unrequested-product-construction",),
+}
+
+OPERATION_APPROVAL_CATEGORY = {
+    operation: category
+    for category, operations in APPROVAL_BOUNDARY_CATEGORIES.items()
+    for operation in operations
+}
+
+APPROVAL_OPERATIONS = frozenset(OPERATION_APPROVAL_CATEGORY)
 
 # These activities are deliberately outside this autonomous software system,
 # even if someone supplies an approval identifier.
@@ -67,6 +72,19 @@ class OperationDecision:
     reason: str
 
 
+def approval_category(operation: str | None, *, download_gb: float = 0) -> str | None:
+    """Return the approval vocabulary term an operation belongs to, if any."""
+    if operation == "download" and download_gb > 5:
+        return OPERATION_APPROVAL_CATEGORY["large-download"]
+    return OPERATION_APPROVAL_CATEGORY.get(operation)
+
+
+def builder_plan_required(selection: dict, roles: tuple[str, ...]) -> bool:
+    if selection.get("type") == "workflow":
+        return workflow(selection["name"]).requires_builder_plan
+    return "builder" in roles
+
+
 def assess_operation(operation: str, *, download_gb: float = 0) -> OperationDecision:
     if not isinstance(download_gb, (int, float)) or isinstance(download_gb, bool) or download_gb < 0:
         return OperationDecision("prohibited", "download size must be a non-negative number")
@@ -108,11 +126,12 @@ def build_composite_budget(
     if max_cost_usd > 0 and not spending_approval_id:
         raise PolicyError("a positive spending limit requires a captain spending approval id")
 
+    requires_plan = builder_plan_required(selection, roles)
     budgets: dict[str, int] = {}
     for role in roles:
         if role == "builder":
             value = builder_budget_minutes if len(roles) > 1 else budget_minutes
-            if not value or value < 1 or not approved_plan_id:
+            if not value or value < 1 or (requires_plan and not approved_plan_id):
                 raise PolicyError(
                     "builder work requires a positive budget from an approved plan and --approved-plan-id"
                 )

@@ -12,6 +12,7 @@ from .definitions import assignment_roles, workflow as workflow_contract
 from .errors import ContractError, PolicyError
 from .knowledge import knowledge_markdown, lexical_lookup
 from .loop import new_loop, record_event
+from .policy import approval_category
 from .store import KnowledgeStore
 from .validator import validate_document
 
@@ -46,12 +47,28 @@ def _verify_checkpoint(run: dict) -> None:
         raise PolicyError("run checkpoint identity mismatch; inspect and recover before continuing")
 
 
-def inspect_run(store: KnowledgeStore, run_id: str) -> dict:
+def _workflow_identity(name: str | None) -> dict | None:
+    if not name:
+        return None
+    try:
+        return workflow_contract(name).identity()
+    except (ValueError, ContractError) as exc:
+        raise PolicyError(f"the workflow contract this run was checkpointed against is unusable: {exc}") from exc
+
+
+def inspect_run(store: KnowledgeStore, run_id: str, *, allow_contract_migration: bool = False) -> dict:
     run = store.load_run(run_id)
     _verify_checkpoint(run)
     assignment = store.load_assignment(run["assignment_id"])
     if _hash(assignment) != run["assignment_sha256"]:
         raise PolicyError("assignment identity changed after run creation")
+    if not allow_contract_migration and _workflow_identity(run.get("workflow")) != run["recovery_identity"].get(
+        "workflow_contract"
+    ):
+        raise PolicyError(
+            "workflow contract identity changed after run creation; "
+            "resume with an explicit safe migration approval before continuing"
+        )
     return run
 
 
@@ -94,6 +111,7 @@ def create_run(store: KnowledgeStore, assignment_id: str) -> dict:
             "environment_identity": assignment["recovery_guards"]["environment_identity"],
             "approval_ids": sorted(item["approval_id"] for item in assignment["approval_pregrants"]),
             "artifact_refs": sorted(initial_artifacts),
+            "workflow_contract": _workflow_identity(assignment.get("workflow")),
         },
         "handoff_ids": [],
     }
@@ -102,17 +120,22 @@ def create_run(store: KnowledgeStore, assignment_id: str) -> dict:
     return run
 
 
-def _apply_pregrant(assignment: dict, event: dict) -> dict:
+def _apply_pregrant(assignment: dict, run: dict, event: dict) -> dict:
     updated = deepcopy(event)
+    if updated.get("approval_id"):
+        return updated
     operation = updated.get("operation")
-    pregrant_operation = "large-download" if operation == "download" and updated.get("download_gb", 0) > 5 else operation
-    if not updated.get("approval_id"):
-        match = next(
-            (item for item in assignment["approval_pregrants"] if item["operation"] == pregrant_operation),
-            None,
-        )
-        if match:
-            updated["approval_id"] = match["approval_id"]
+    category = approval_category(operation, download_gb=updated.get("download_gb") or 0)
+    workflow_name = run.get("workflow")
+    if workflow_name and run["role_index"] > 0 and category in workflow_contract(workflow_name).never_approves:
+        return updated
+    pregrant_operation = "large-download" if operation == "download" and category == "large download" else operation
+    match = next(
+        (item for item in assignment["approval_pregrants"] if item["operation"] == pregrant_operation),
+        None,
+    )
+    if match:
+        updated["approval_id"] = match["approval_id"]
     return updated
 
 
@@ -121,7 +144,7 @@ def add_loop_event(store: KnowledgeStore, run_id: str, event: dict) -> dict:
     if run["status"] in {"complete", "stopped", "awaiting-handoff"}:
         raise PolicyError(f"run status {run['status']!r} does not accept loop events")
     assignment = store.load_assignment(run["assignment_id"])
-    event = _apply_pregrant(assignment, event)
+    event = _apply_pregrant(assignment, run, event)
     run["loop"] = record_event(run["loop"], event)
     run["status"] = "active"
     if event.get("approval_id"):
@@ -148,8 +171,35 @@ def add_loop_event(store: KnowledgeStore, run_id: str, event: dict) -> dict:
     return run
 
 
+def _migrate_workflow_contract(run: dict, attestation: dict) -> None:
+    snapshot = run["recovery_identity"].get("workflow_contract")
+    current = _workflow_identity(run.get("workflow"))
+    if current == snapshot:
+        return
+    approval_id = str(attestation.get("workflow_contract_migration_approval_id") or "").strip()
+    if not approval_id:
+        raise PolicyError(
+            "the workflow contract changed since this checkpoint; "
+            "resume requires an explicit safe migration approval id"
+        )
+    if snapshot is None or current is None or current["name"] != snapshot["name"] or current["roles"] != snapshot["roles"]:
+        raise PolicyError("a workflow contract migration cannot change the run's workflow identity or declared route")
+    for key in ("minimum_confidence", "minimum_claim_confidence"):
+        if CONFIDENCE[current[key]] < CONFIDENCE[snapshot[key]]:
+            raise PolicyError("a workflow contract migration cannot lower a declared handoff confidence floor")
+    run["recovery_identity"]["workflow_contract"] = current
+    run.setdefault("workflow_contract_migrations", []).append(
+        {
+            "approval_id": approval_id,
+            "from_sha256": snapshot["sha256"],
+            "to_sha256": current["sha256"],
+            "migrated_at": now_utc(),
+        }
+    )
+
+
 def resume_run(store: KnowledgeStore, run_id: str, attestation: dict) -> dict:
-    run = inspect_run(store, run_id)
+    run = inspect_run(store, run_id, allow_contract_migration=True)
     required = {
         "run_id",
         "checkpoint_sha256",
@@ -158,8 +208,12 @@ def resume_run(store: KnowledgeStore, run_id: str, attestation: dict) -> dict:
         "approval_ids",
         "artifact_refs",
     }
-    if not isinstance(attestation, dict) or set(attestation) != required:
-        raise ContractError("resume attestation must contain exactly the v1 recovery identity fields")
+    optional = {"workflow_contract_migration_approval_id"}
+    if not isinstance(attestation, dict) or not required <= set(attestation) or set(attestation) - required - optional:
+        raise ContractError(
+            "resume attestation must contain exactly the v1 recovery identity fields, "
+            "plus an optional workflow contract migration approval id"
+        )
     if any(not isinstance(attestation[key], str) or not attestation[key] for key in ("run_id", "checkpoint_sha256", "source_identity", "environment_identity")):
         raise ContractError("resume identity and checkpoint fields must be non-empty strings")
     for key in ("approval_ids", "artifact_refs"):
@@ -178,6 +232,7 @@ def resume_run(store: KnowledgeStore, run_id: str, attestation: dict) -> dict:
         raise PolicyError("resume artifact identity changed")
     if run["status"] in {"complete", "stopped", "awaiting-handoff"}:
         raise PolicyError(f"run status {run['status']!r} cannot resume")
+    _migrate_workflow_contract(run, attestation)
     run["last_resumed_at"] = now_utc()
     run["updated_at"] = now_utc()
     _checkpoint(run)
@@ -209,8 +264,14 @@ def advance_handoff(store: KnowledgeStore, run_id: str, handoff: dict) -> dict:
         raise PolicyError(
             f"every load-bearing handoff claim requires {contract.minimum_claim_confidence} confidence and evidence"
         )
+    never_approved = sorted(set(handoff["approval_boundaries_triggered"]) & set(contract.never_approves))
+    if never_approved:
+        raise PolicyError(f"this workflow never approves {', '.join(never_approved)} through a handoff")
     if handoff["approval_boundaries_triggered"]:
         raise PolicyError("approval-boundary work cannot be authorized by a handoff")
+    unpreserved = [field for field in contract.preserved_fields if not handoff.get(field)]
+    if unpreserved:
+        raise PolicyError(f"handoff must preserve {', '.join(unpreserved)} declared by this workflow")
 
     expected_source = run["current_role"]
     next_index = run["role_index"] + 1
@@ -233,9 +294,15 @@ def advance_handoff(store: KnowledgeStore, run_id: str, handoff: dict) -> dict:
         carried_usage=run["loop"]["usage"],
     )
     run["handoff_ids"].append(handoff["id"])
+    preserved = set(contract.preserved_fields)
     artifact_refs = set(run["recovery_identity"]["artifact_refs"])
     artifact_refs.add(handoff["id"])
-    artifact_refs.update(item["artifact_id"] for item in handoff["provenance"])
+    if "provenance" in preserved:
+        artifact_refs.update(item["artifact_id"] for item in handoff["provenance"])
+    if "evidence_refs" in preserved:
+        artifact_refs.update(handoff["evidence_refs"])
+    if "uncertainty" in preserved:
+        run["carried_uncertainty"] = sorted(set(run.get("carried_uncertainty", [])) | set(handoff["uncertainty"]))
     run["recovery_identity"]["artifact_refs"] = sorted(artifact_refs)
     run["updated_at"] = now_utc()
     _checkpoint(run)

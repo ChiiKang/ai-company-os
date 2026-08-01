@@ -8,9 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .definitions import ROLES, assignment_roles, workflow_names
+from .definitions import ROLES, assignment_roles, workflow, workflow_names
 from .errors import ContractError
 from .paths import public_repo_root
+from .policy import APPROVAL_BOUNDARY_CATEGORIES
 
 SCHEMAS = {
     "assignment": "assignment.schema.json",
@@ -21,11 +22,15 @@ SCHEMAS = {
     "workflow": "workflow.schema.json",
 }
 
-# Enumerations whose members are owned by a registry rather than by the schema file,
-# so a contract never carries a second copy of the runtime authority.
-DYNAMIC_ENUM_SOURCES = {
+# The published schemas stay standard JSON Schema: every member below is written into
+# the files as a literal enum by `scripts/sync-schema-enums.py` and kept honest by the
+# freshness check, so an external validator sees the same constraints this one applies.
+GENERATED_ENUM_MARKER = "generated-enum:"
+
+GENERATED_ENUM_SOURCES = {
     "role-names": lambda: list(ROLES),
     "workflow-names": lambda: list(workflow_names()),
+    "approval-boundary-categories": lambda: sorted(APPROVAL_BOUNDARY_CATEGORIES),
 }
 
 
@@ -122,30 +127,48 @@ def _validate(schema: dict, value: Any, path: str, errors: list[str]) -> None:
             errors.append(f"{path}: must be at most {schema['maximum']}")
 
 
-def _resolve_dynamic_enums(node: Any, kind: str) -> Any:
-    if isinstance(node, dict):
-        source = node.get("enumSource")
-        if source is None:
-            return {name: _resolve_dynamic_enums(item, kind) for name, item in node.items()}
-        if source not in DYNAMIC_ENUM_SOURCES:
-            raise ContractError(f"{kind} schema names unknown enum source {source!r}")
-        if kind == "workflow" and source == "workflow-names":
-            raise ContractError("the workflow contract cannot depend on the registry it defines")
-        return {"type": "string", "enum": DYNAMIC_ENUM_SOURCES[source]()}
-    if isinstance(node, list):
-        return [_resolve_dynamic_enums(item, kind) for item in node]
-    return node
+def schemas_directory(schemas_dir: str | Path | None = None) -> Path:
+    return Path(schemas_dir) if schemas_dir else public_repo_root() / "schemas"
 
 
 def load_schema(kind: str, schemas_dir: str | Path | None = None) -> dict:
     if kind not in SCHEMAS:
         raise ContractError(f"unknown artifact type {kind!r}; choose from {', '.join(SCHEMAS)}")
-    root = Path(schemas_dir) if schemas_dir else public_repo_root() / "schemas"
+    root = schemas_directory(schemas_dir)
     try:
-        schema = json.loads((root / SCHEMAS[kind]).read_text(encoding="utf-8"))
+        return json.loads((root / SCHEMAS[kind]).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError(f"cannot load schema for {kind}: {exc}") from exc
-    return _resolve_dynamic_enums(schema, kind)
+
+
+def generated_enum(source: str) -> list[str]:
+    if source not in GENERATED_ENUM_SOURCES:
+        raise ContractError(f"unknown generated enum source {source!r}")
+    return GENERATED_ENUM_SOURCES[source]()
+
+
+def generated_enum_nodes(node: Any, path: str = "$"):
+    """Yield every subschema whose enum members are owned by a runtime registry."""
+    if isinstance(node, dict):
+        comment = node.get("$comment", "")
+        if isinstance(comment, str) and comment.startswith(GENERATED_ENUM_MARKER):
+            yield path, comment[len(GENERATED_ENUM_MARKER) :], node
+        for name, item in node.items():
+            yield from generated_enum_nodes(item, f"{path}.{name}")
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            yield from generated_enum_nodes(item, f"{path}[{index}]")
+
+
+def generated_enum_drift(schemas_dir: str | Path | None = None) -> list[str]:
+    """Report published enums that no longer match the registry that owns them."""
+    drift: list[str] = []
+    for kind in sorted(SCHEMAS):
+        for path, source, node in generated_enum_nodes(load_schema(kind, schemas_dir)):
+            expected = generated_enum(source)
+            if node.get("type") != "string" or node.get("enum") != expected:
+                drift.append(f"{SCHEMAS[kind]} {path}: {source} enum is stale, expected {expected}")
+    return drift
 
 
 def _check_confidence(document: dict, errors: list[str]) -> None:
@@ -195,7 +218,11 @@ def _semantic_checks(kind: str, document: dict, errors: list[str]) -> None:
             errors.append("$.composite_budget.role_wall_clock_minutes: must cover exactly the selected roles")
         if budgets and budget.get("wall_clock_minutes") != sum(budgets.values()):
             errors.append("$.composite_budget.wall_clock_minutes: must equal the selected role ceilings")
-        if "builder" in roles and not budget.get("builder_plan_approval_id"):
+        selected = document.get("workflow")
+        requires_builder_plan = "builder" in roles
+        if roles and selected:
+            requires_builder_plan = workflow(selected).requires_builder_plan
+        if requires_builder_plan and not budget.get("builder_plan_approval_id"):
             errors.append("$.composite_budget: Builder budget must come from an approved plan")
         recovery = document.get("recovery_guards", {})
         if "project-validation" in roles and (

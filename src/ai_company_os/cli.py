@@ -196,6 +196,7 @@ def command_run_inspect(args: argparse.Namespace) -> int:
             "unknown_usage": run["loop"]["unknown_usage"],
             "checkpoint": run["checkpoint"],
             "recovery_identity": run["recovery_identity"],
+            "carried_uncertainty": run.get("carried_uncertainty", []),
         }
     )
     return 0
@@ -211,7 +212,15 @@ def command_run_resume(args: argparse.Namespace) -> int:
 def command_run_handoff(args: argparse.Namespace) -> int:
     handoff = load_json(args.file, must_be_private_source=True)
     run = advance_handoff(KnowledgeStore(args.root), args.run, handoff)
-    emit({"run_id": run["id"], "current_role": run["current_role"], "role_definition_path": run["role_definition_path"], "status": run["status"]})
+    emit(
+        {
+            "run_id": run["id"],
+            "current_role": run["current_role"],
+            "role_definition_path": run["role_definition_path"],
+            "status": run["status"],
+            "carried_uncertainty": run.get("carried_uncertainty", []),
+        }
+    )
     return 0
 
 

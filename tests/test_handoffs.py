@@ -63,7 +63,7 @@ class HandoffTests(unittest.TestCase):
 
     def test_handoff_cannot_authorize_approval_boundary(self):
         document = handoff(self.assignment["id"], self.run["id"])
-        document["approval_boundaries_triggered"] = ["paid API"]
+        document["approval_boundaries_triggered"] = ["spending"]
         with self.assertRaises(PolicyError):
             advance_handoff(self.store, self.run["id"], document)
 

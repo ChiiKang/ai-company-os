@@ -8,6 +8,7 @@ is loaded and validated at runtime instead of being restated here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,8 @@ DEFAULT_BUDGETS_MINUTES = {
 @dataclass(frozen=True)
 class Workflow:
     name: str
+    schema_version: str
+    digest: str
     roles: tuple[str, ...]
     description: str
     requires_builder_plan: bool
@@ -35,9 +38,24 @@ class Workflow:
     preserved_fields: tuple[str, ...]
     never_approves: tuple[str, ...]
 
+    def identity(self) -> dict:
+        """The contract identity bound into a run's checkpoint and recovery guards."""
+        return {
+            "name": self.name,
+            "schema_version": self.schema_version,
+            "sha256": self.digest,
+            "minimum_confidence": self.minimum_confidence,
+            "minimum_claim_confidence": self.minimum_claim_confidence,
+            "roles": list(self.roles),
+        }
+
 
 def workflows_directory() -> Path:
     return public_repo_root() / "workflows"
+
+
+def contract_digest(document: dict) -> str:
+    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def load_workflows(directory: str | Path) -> dict[str, Workflow]:
@@ -67,6 +85,8 @@ def load_workflows(directory: str | Path) -> dict[str, Workflow]:
         handoff = document["automatic_handoff"]
         loaded[name] = Workflow(
             name=name,
+            schema_version=document["schema_version"],
+            digest=contract_digest(document),
             roles=roles,
             description=document["description"],
             requires_builder_plan=requires_builder_plan,
