@@ -3,6 +3,7 @@ import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { boundedInteger } from "./bounds.js";
 import { cleanBacklogTitle, humanizeId, projectLabel, safeId, sanitizeStateDetail, sanitizeText } from "./sanitize.js";
 
 const MAX_TASKS = 128;
@@ -129,13 +130,13 @@ export class FirstmateAdapter {
     for (const entry of metaEntries.records) {
       const id = entry.name.slice(0, -5);
       const metaPath = path.join(this.stateDir, entry.name);
+      const planned = backlogById.get(id);
       try {
         const [meta, fileStat, history] = await Promise.all([
           readKeyValueFile(metaPath, this.maxMetaBytes),
           stat(metaPath),
           this.readStatusHistory(id),
         ]);
-        const planned = backlogById.get(id);
         const workstream = sanitizeText(planned?.repo || projectLabel(meta.project), 72) || "Unassigned";
         const firstSeenAt = new Date(validTimestamp(fileStat.birthtimeMs) ?? fileStat.ctimeMs ?? fileStat.mtimeMs).toISOString();
         tasks.push({
@@ -524,11 +525,6 @@ async function findOnPath(executable, pathValue) {
 
 function unique(values) {
   return [...new Set(values.map((value) => path.resolve(String(value))))];
-}
-
-function boundedInteger(value, fallback, minimum, maximum) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) ? Math.max(minimum, Math.min(maximum, parsed)) : fallback;
 }
 
 function validTimestamp(value) {

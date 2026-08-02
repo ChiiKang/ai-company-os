@@ -2,8 +2,11 @@ import {
   BROWSER_EVENT_LIMIT,
   ackKey,
   appendBoundedEvent,
+  bridgeFailedFor,
+  connectionReadout,
   filterFleet,
   flowColumnFor,
+  ledgerEmptyCopy,
   shouldRunRadar,
   sourceLabel,
   stateLabel,
@@ -19,7 +22,8 @@ const model = {
   plans: [],
   events: [],
   selectedId: null,
-  connection: "connecting",
+  transport: "connecting",
+  bridgeFailed: false,
   acknowledged: loadAcknowledgements(),
   staticMode: loadMotionPreference(),
 };
@@ -71,10 +75,10 @@ applyMotionMode();
 connectStream();
 
 function connectStream() {
-  setConnection("connecting", "Connecting");
+  setTransport("connecting");
   source = new EventSource("/events");
-  source.onopen = () => setConnection("live", "Live / SSE");
-  source.onerror = () => setConnection("reconnecting", "Reconnecting");
+  source.onopen = () => setTransport("live");
+  source.onerror = () => setTransport("reconnecting");
   source.onmessage = (message) => {
     let event;
     try { event = JSON.parse(message.data); } catch { return; }
@@ -88,7 +92,7 @@ function handleFleetEvent(event) {
     return;
   }
   if (event.type === "bridge.error") {
-    setConnection("error", "Bridge error");
+    model.bridgeFailed = true;
     model.events = appendBoundedEvent(model.events, eventToLedger(event));
     render();
     return;
@@ -107,6 +111,7 @@ function handleFleetEvent(event) {
 
 function applySnapshot(snapshot) {
   model.snapshot = snapshot;
+  model.bridgeFailed = bridgeFailedFor(snapshot?.phase);
   model.tasks = new Map((snapshot?.tasks ?? []).map((task) => [task.id, task]));
   model.plans = snapshot?.plans ?? [];
   model.events = (snapshot?.ledger ?? []).slice(0, BROWSER_EVENT_LIMIT);
@@ -116,6 +121,7 @@ function applySnapshot(snapshot) {
 }
 
 function render() {
+  renderConnection();
   renderMetrics();
   renderAcknowledgements();
   renderModeState();
@@ -146,6 +152,7 @@ function renderLoading() {
   elements.topologyEmpty.textContent = "Loading local topology.";
   elements.eventBody.replaceChildren();
   elements.ledgerEmpty.hidden = false;
+  setLedgerEmpty(ledgerEmptyCopy({ phase: "loading" }));
 }
 
 function renderFailure() {
@@ -159,8 +166,7 @@ function renderFailure() {
   elements.topologyEmpty.textContent = "Topology unavailable.";
   elements.eventBody.replaceChildren();
   elements.ledgerEmpty.hidden = false;
-  elements.ledgerEmpty.querySelector("strong").textContent = "Event ledger unavailable";
-  elements.ledgerEmpty.querySelector("span").textContent = hint;
+  setLedgerEmpty(ledgerEmptyCopy({ phase: model.snapshot?.phase ?? "error", hint }));
 }
 
 function renderFlowline() {
@@ -274,6 +280,7 @@ function renderLedger() {
   const events = model.events.filter((event) => eventMatchesFilter(event));
   elements.ledgerBound.textContent = `${model.events.length} of ${BROWSER_EVENT_LIMIT} browser records`;
   elements.ledgerEmpty.hidden = events.length > 0;
+  setLedgerEmpty(ledgerEmptyCopy({ phase: model.snapshot?.phase }));
   const rows = events.map((event) => {
     const row = document.createElement("tr");
     row.append(
@@ -485,10 +492,20 @@ function stateMessage(title, description, className = "state-message") {
   return block;
 }
 
-function setConnection(state, label) {
-  model.connection = state;
-  elements.connection.dataset.state = state;
-  elements.connection.querySelector("span").textContent = label;
+function setTransport(transport) {
+  model.transport = transport;
+  renderConnection();
+}
+
+function renderConnection() {
+  const readout = connectionReadout({ transport: model.transport, bridgeFailed: model.bridgeFailed });
+  elements.connection.dataset.state = readout.state;
+  elements.connection.querySelector("span").textContent = readout.label;
+}
+
+function setLedgerEmpty({ title, description }) {
+  elements.ledgerEmpty.querySelector("strong").textContent = title;
+  elements.ledgerEmpty.querySelector("span").textContent = description;
 }
 
 function updateSystemFooter() {

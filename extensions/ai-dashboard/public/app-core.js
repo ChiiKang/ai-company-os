@@ -11,8 +11,31 @@ export const STATE_LABELS = Object.freeze({
   queued: "Queued",
 });
 
+export const FAILED_PHASES = Object.freeze(["error", "unavailable"]);
+
+export const DEFAULT_LEDGER_EMPTY = Object.freeze({
+  title: "No fleet events yet",
+  description: "New joins, reconciled state transitions, and bounded status history will appear here.",
+});
+
 export function stateLabel(state, fallback = "Unavailable") {
   return STATE_LABELS[state] ?? fallback;
+}
+
+export function bridgeFailedFor(phase) {
+  return FAILED_PHASES.includes(phase);
+}
+
+export function connectionReadout({ transport = "connecting", bridgeFailed = false } = {}) {
+  if (transport === "connecting") return { state: "connecting", label: "Connecting" };
+  if (transport !== "live") return { state: "reconnecting", label: "Reconnecting" };
+  if (bridgeFailed) return { state: "error", label: "Bridge error" };
+  return { state: "live", label: "Live / SSE" };
+}
+
+export function ledgerEmptyCopy({ phase, hint } = {}) {
+  if (!bridgeFailedFor(phase)) return DEFAULT_LEDGER_EMPTY;
+  return { title: "Event ledger unavailable", description: hint || DEFAULT_LEDGER_EMPTY.description };
 }
 
 export function flowColumnFor(item) {

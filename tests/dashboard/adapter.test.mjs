@@ -89,6 +89,59 @@ test("adapter inventory and per-task status history enforce configured ceilings"
   }
 });
 
+test("a task record that vanishes mid-read degrades to one unreadable row instead of failing the inventory", async () => {
+  const fixture = await createFirstmateFixture("adapter-race");
+  try {
+    await fixture.writeBacklog([
+      { id: "alpha-task", title: "Build bounded local telemetry", state: "in_flight", repo: "alpha" },
+      { id: "beta-task", title: "Verify race recovery", state: "in_flight", repo: "beta" },
+    ]);
+    await fixture.addTask("beta-task", { project: "beta" });
+    const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+    const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 });
+    const readStatusHistory = adapter.readStatusHistory.bind(adapter);
+    adapter.readStatusHistory = async (id) => {
+      if (id === "beta-task") throw Object.assign(new Error("ENOENT: task record removed mid-read"), { code: "ENOENT" });
+      return readStatusHistory(id);
+    };
+
+    const inventory = await adapter.readInventory();
+    assert.equal(inventory.error, null);
+    assert.deepEqual(inventory.tasks.map((task) => task.id).sort(), ["alpha-task", "beta-task"]);
+    const alpha = inventory.tasks.find((task) => task.id === "alpha-task");
+    assert.equal(alpha.state, "unavailable");
+    assert.equal(alpha.workstream, "alpha");
+    const beta = inventory.tasks.find((task) => task.id === "beta-task");
+    assert.equal(beta.title, "Verify race recovery", "the unreadable row must still use its planned backlog title");
+    assert.equal(beta.workstream, "beta");
+    assert.equal(beta.detail, "The local task record could not be read safely.");
+    assert.deepEqual(inventory.histories.get("beta-task"), []);
+    adapter.close();
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("an unreadable task with no backlog record still yields a bounded fallback row", async () => {
+  const fixture = await createFirstmateFixture("adapter-race-unplanned");
+  try {
+    await fixture.addTask("orphan-task", { project: "orphan" });
+    await fixture.writeBacklog([]);
+    const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+    const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 });
+    adapter.readStatusHistory = async () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); };
+
+    const inventory = await adapter.readInventory();
+    assert.equal(inventory.error, null);
+    const orphan = inventory.tasks.find((task) => task.id === "orphan-task");
+    assert.equal(orphan.title, "Orphan Task");
+    assert.equal(orphan.workstream, "Unassigned");
+    adapter.close();
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("sanitizer redacts credentials and absolute local paths", () => {
   const apiCredentialFixture = ["sk", "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"].join("-");
   const value = sanitizeText(`token=${apiCredentialFixture} at /Users/name/private.txt`);

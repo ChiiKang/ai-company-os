@@ -3,10 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   BROWSER_EVENT_LIMIT,
+  DEFAULT_LEDGER_EMPTY,
   ackKey,
   appendBoundedEvent,
+  bridgeFailedFor,
+  connectionReadout,
   filterFleet,
   flowColumnFor,
+  ledgerEmptyCopy,
   shouldRunRadar,
   topologyLayout,
 } from "../../extensions/ai-dashboard/public/app-core.js";
@@ -47,6 +51,37 @@ test("radar liveness stops for static, reduced-motion, hidden, and non-topology 
   assert.equal(shouldRunRadar({ staticMode: false, reducedMotion: false, hidden: false, mode: "flowline" }), false);
 });
 
+test("connection readout distinguishes transport states from bridge failure and recovers", () => {
+  assert.deepEqual(connectionReadout({ transport: "connecting", bridgeFailed: false }), { state: "connecting", label: "Connecting" });
+  assert.deepEqual(connectionReadout({ transport: "reconnecting", bridgeFailed: true }), { state: "reconnecting", label: "Reconnecting" });
+  assert.deepEqual(connectionReadout({ transport: "live", bridgeFailed: true }), { state: "error", label: "Bridge error" });
+  assert.deepEqual(connectionReadout({ transport: "live", bridgeFailed: false }), { state: "live", label: "Live / SSE" });
+
+  assert.equal(bridgeFailedFor("error"), true);
+  assert.equal(bridgeFailedFor("unavailable"), true);
+  assert.equal(bridgeFailedFor("ready"), false);
+  assert.equal(bridgeFailedFor("empty"), false);
+  assert.equal(bridgeFailedFor("loading"), false);
+
+  const failed = { transport: "live", bridgeFailed: bridgeFailedFor("error") };
+  assert.equal(connectionReadout(failed).state, "error");
+  assert.equal(connectionReadout({ ...failed, bridgeFailed: bridgeFailedFor("ready") }).state, "live");
+});
+
+test("ledger empty-state copy is restored once the bridge recovers", async () => {
+  const hint = "Check the Firstmate home.";
+  const failure = ledgerEmptyCopy({ phase: "error", hint });
+  assert.equal(failure.title, "Event ledger unavailable");
+  assert.equal(failure.description, hint);
+  for (const phase of ["ready", "empty", "loading", undefined]) {
+    assert.deepEqual(ledgerEmptyCopy({ phase, hint }), DEFAULT_LEDGER_EMPTY, `phase ${phase} must restore the real empty state`);
+  }
+
+  const html = await readFile(htmlUrl, "utf8");
+  assert.match(html, new RegExp(escapeRegExp(DEFAULT_LEDGER_EMPTY.title)));
+  assert.match(html, new RegExp(escapeRegExp(DEFAULT_LEDGER_EMPTY.description)));
+});
+
 test("HTML exposes keyboard landmarks, explicit states, and three functional modes", async () => {
   const html = await readFile(htmlUrl, "utf8");
   for (const required of [
@@ -74,6 +109,8 @@ test("browser code uses one EventSource and no panel polling loops", async () =>
   assert.match(app, /slice\(-BROWSER_EVENT_LIMIT\)/);
   assert.match(app, /document\.addEventListener\("visibilitychange"/);
   assert.match(app, /td\.dataset\.label = label/);
+  assert.equal((app.match(/ledgerEmpty\.querySelector\(/g) || []).length, 2, "ledger empty-state copy must only be written through setLedgerEmpty");
+  assert.match(app, /setLedgerEmpty\(ledgerEmptyCopy\(/);
 });
 
 test("responsive, contrast-support, and reduced-motion CSS contracts cover narrow, tablet, and wide layouts", async () => {

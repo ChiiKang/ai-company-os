@@ -1,5 +1,6 @@
 import { watch } from "node:fs";
 import path from "node:path";
+import { boundedInteger } from "./bounds.js";
 import { safeId, sanitizeText } from "./sanitize.js";
 
 const LEDGER_LIMIT = 200;
@@ -392,9 +393,4 @@ function idFromFilename(filename) {
     if (name.endsWith(suffix)) return safeId(name.slice(0, -suffix.length));
   }
   return null;
-}
-
-function boundedInteger(value, fallback, minimum, maximum) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) ? Math.max(minimum, Math.min(maximum, parsed)) : fallback;
 }

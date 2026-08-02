@@ -167,6 +167,9 @@ export class DashboardServer {
   }
 
   #openEventStream(request, response) {
+    if (!this.broker.hasCapacity()) {
+      return this.#send(response, 503, "text/plain; charset=utf-8", "The local dashboard is at its bounded SSE client limit. Close another dashboard tab and reload.\n");
+    }
     const headers = securityHeaders("text/event-stream; charset=utf-8");
     Object.assign(headers, {
       "Cache-Control": "no-store, no-cache, must-revalidate",

@@ -66,7 +66,11 @@ The server binds only to IPv4 loopback and validates `Host` and browser `Origin`
 - The three mode tabs support Left/Right Arrow, Home, and End. Controls have visible keyboard focus and coarse-pointer target sizing.
 - Browser `prefers-reduced-motion`, page visibility, and the persistent **STATIC** mode stop continuous radar movement. Static mode is stored only in browser local storage.
 
-The client opens one `EventSource`. It does not poll individual panels. Native EventSource reconnects automatically; the connection readout distinguishes connecting, live, reconnecting, and bridge error states. Every valid reconnect receives a current bounded snapshot before retained newer events, so an equal cursor cannot preserve stale state across a server restart. A cursor outside retained bounds receives an explicit reset snapshot rather than an unbounded replay.
+The client opens one `EventSource`. It does not poll individual panels. Native EventSource reconnects automatically; the connection readout distinguishes connecting, live, reconnecting, and bridge error states, and it returns to the live label once a later reconciliation succeeds.
+Every valid reconnect receives a current bounded snapshot before retained newer events, so an equal cursor cannot preserve stale state across a server restart. A cursor outside retained bounds receives an explicit reset snapshot rather than an unbounded replay.
+
+A frame larger than the socket write buffer is normal backpressure, not a failure: the server keeps the stream open and waits for the socket to drain, and only evicts a client whose unflushed bytes pass the per-client buffer ceiling or that stays stalled past the backpressure timeout.
+A request that arrives when every SSE slot is taken is refused with `503` and a plain-text body before any snapshot is serialized, so a refused tab reports an error instead of retrying on the native EventSource interval.
 
 ## Resource ceilings
 
@@ -82,7 +86,8 @@ The client opens one `EventSource`. It does not poll individual panels. Native E
 | server broker retention | 256 events |
 | server ledger retention | 200 events |
 | browser event history | 200 events |
-| simultaneous SSE clients | 32 |
+| simultaneous SSE clients | 32, then `503` |
+| unflushed bytes per SSE client | 1 MiB, or 10 s stalled |
 | static asset or snapshot response | 512 KiB |
 | topology nodes | 32 visible, with an omitted count |
 | topology workstream hubs | 8 direct plus one bounded overflow hub |

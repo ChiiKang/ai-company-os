@@ -1,17 +1,34 @@
+import { boundedInteger } from "./bounds.js";
+
 const DEFAULT_RETENTION = 256;
 const DEFAULT_CLIENT_LIMIT = 32;
 const DEFAULT_EVENT_BYTES = 256 * 1024;
+const DEFAULT_CLIENT_BUFFER_BYTES = 1024 * 1024;
+const DEFAULT_BACKPRESSURE_MS = 10_000;
+const DEFAULT_HEARTBEAT_MS = 15_000;
 
 export class EventBroker {
-  constructor({ retention = DEFAULT_RETENTION, clientLimit = DEFAULT_CLIENT_LIMIT, heartbeatMs = 15_000, eventByteLimit = DEFAULT_EVENT_BYTES } = {}) {
-    this.retention = positiveInteger(retention, DEFAULT_RETENTION);
-    this.clientLimit = positiveInteger(clientLimit, DEFAULT_CLIENT_LIMIT);
-    this.eventByteLimit = positiveInteger(eventByteLimit, DEFAULT_EVENT_BYTES);
+  constructor({
+    retention = DEFAULT_RETENTION,
+    clientLimit = DEFAULT_CLIENT_LIMIT,
+    heartbeatMs = DEFAULT_HEARTBEAT_MS,
+    eventByteLimit = DEFAULT_EVENT_BYTES,
+    clientBufferBytes = DEFAULT_CLIENT_BUFFER_BYTES,
+    backpressureTimeoutMs = DEFAULT_BACKPRESSURE_MS,
+  } = {}) {
+    this.retention = boundedInteger(retention, DEFAULT_RETENTION, 1, 4_096);
+    this.clientLimit = boundedInteger(clientLimit, DEFAULT_CLIENT_LIMIT, 1, 256);
+    this.eventByteLimit = boundedInteger(eventByteLimit, DEFAULT_EVENT_BYTES, 1024, 4 * 1024 * 1024);
+    this.clientBufferLimit = Math.max(
+      this.eventByteLimit,
+      boundedInteger(clientBufferBytes, DEFAULT_CLIENT_BUFFER_BYTES, 1024, 8 * 1024 * 1024),
+    );
+    this.backpressureTimeoutMs = boundedInteger(backpressureTimeoutMs, DEFAULT_BACKPRESSURE_MS, 100, 120_000);
     this.events = [];
     this.clients = new Set();
     this.nextId = 1;
     this.closed = false;
-    this.heartbeat = setInterval(() => this.#heartbeat(), positiveInteger(heartbeatMs, 15_000));
+    this.heartbeat = setInterval(() => this.#heartbeat(), boundedInteger(heartbeatMs, DEFAULT_HEARTBEAT_MS, 250, 300_000));
     this.heartbeat.unref?.();
   }
 
@@ -30,10 +47,14 @@ export class EventBroker {
     return event;
   }
 
+  hasCapacity() {
+    return !this.closed && this.clients.size < this.clientLimit;
+  }
+
   connect(response, { lastEventId = null, snapshot = null } = {}) {
     if (this.closed) throw new Error("Event broker is closed");
     if (this.clients.size >= this.clientLimit) return false;
-    const client = { response, closed: false };
+    const client = { response, closed: false, pendingBytes: 0, stallTimer: null };
     this.clients.add(client);
 
     const parsedLastId = Number.parseInt(String(lastEventId ?? ""), 10);
@@ -76,6 +97,7 @@ export class EventBroker {
   disconnect(client) {
     if (!client || client.closed) return;
     client.closed = true;
+    this.#clearStallTimer(client);
     this.clients.delete(client);
   }
 
@@ -99,10 +121,7 @@ export class EventBroker {
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.heartbeat);
-    for (const client of [...this.clients]) {
-      client.closed = true;
-      try { client.response.end(); } catch {}
-    }
+    for (const client of [...this.clients]) this.#drop(client);
     this.clients.clear();
   }
 
@@ -116,24 +135,44 @@ export class EventBroker {
       this.disconnect(client);
       return false;
     }
+    const bytes = Buffer.byteLength(encoded);
+    if (client.pendingBytes + bytes > this.clientBufferLimit) {
+      this.#drop(client);
+      return false;
+    }
     try {
-      const writable = client.response.write(encoded);
-      if (!writable) {
-        this.disconnect(client);
-        client.response.end();
-        return false;
-      }
+      client.pendingBytes += bytes;
+      const flushed = client.response.write(encoded, () => {
+        client.pendingBytes = Math.max(0, client.pendingBytes - bytes);
+        if (client.pendingBytes === 0) this.#clearStallTimer(client);
+      });
+      if (!flushed && client.pendingBytes > 0) this.#armStallTimer(client);
       return true;
     } catch {
       this.disconnect(client);
       return false;
     }
   }
-}
 
-function positiveInteger(value, fallback) {
-  const parsed = Number.parseInt(String(value), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  #armStallTimer(client) {
+    if (client.stallTimer) return;
+    client.stallTimer = setTimeout(() => {
+      client.stallTimer = null;
+      if (client.pendingBytes > 0) this.#drop(client);
+    }, this.backpressureTimeoutMs);
+    client.stallTimer.unref?.();
+  }
+
+  #clearStallTimer(client) {
+    if (!client.stallTimer) return;
+    clearTimeout(client.stallTimer);
+    client.stallTimer = null;
+  }
+
+  #drop(client) {
+    this.disconnect(client);
+    try { client.response.end(); } catch {}
+  }
 }
 
 function encodeEvent(event) {

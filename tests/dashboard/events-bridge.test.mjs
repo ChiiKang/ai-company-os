@@ -90,6 +90,167 @@ test("stale SSE cursor receives a bounded reset snapshot", async () => {
   }
 });
 
+test("a backpressured frame waits for drain instead of dropping the SSE client", () => {
+  const broker = new EventBroker({ retention: 8, heartbeatMs: 60_000, eventByteLimit: 2048, clientBufferBytes: 8192, backpressureTimeoutMs: 60_000 });
+  try {
+    const response = stalledResponse();
+    assert.equal(broker.connect(response, { snapshot: { blob: "x".repeat(600) } }), true);
+    const [client] = broker.clients;
+    assert.ok(client.pendingBytes > 0, "the unflushed snapshot frame must be accounted as pending");
+    assert.equal(broker.clients.size, 1, "an oversized first frame must not disconnect the client");
+
+    broker.publish("fixture.large", { blob: "y".repeat(600) });
+    assert.equal(broker.clients.size, 1, "a second backpressured frame must not disconnect the client");
+    assert.equal(response.writableEnded, false);
+
+    response.drain();
+    assert.equal(client.pendingBytes, 0);
+    assert.equal(client.stallTimer, null);
+    assert.equal(broker.clients.size, 1);
+  } finally {
+    broker.close();
+  }
+});
+
+test("a client that never drains is dropped at the bounded per-client buffer ceiling", () => {
+  const broker = new EventBroker({ retention: 64, heartbeatMs: 60_000, eventByteLimit: 1024, clientBufferBytes: 4096, backpressureTimeoutMs: 60_000 });
+  try {
+    const response = stalledResponse();
+    broker.connect(response, { snapshot: { blob: "x".repeat(200) } });
+    for (let index = 0; index < 32 && broker.clients.size > 0; index += 1) broker.publish("fixture", { blob: "y".repeat(200) });
+    assert.equal(broker.clients.size, 0, "an unbounded pending buffer must not accumulate");
+    assert.equal(response.writableEnded, true);
+  } finally {
+    broker.close();
+  }
+});
+
+test("a stalled client is dropped after the bounded backpressure timeout", async () => {
+  const broker = new EventBroker({ heartbeatMs: 60_000, eventByteLimit: 4096, clientBufferBytes: 1024 * 1024, backpressureTimeoutMs: 100 });
+  try {
+    const response = stalledResponse();
+    broker.connect(response, { snapshot: { blob: "x".repeat(600) } });
+    assert.equal(broker.clients.size, 1);
+    await waitFor(() => broker.clients.size === 0, { message: "stalled client eviction" });
+    assert.equal(response.writableEnded, true);
+  } finally {
+    broker.close();
+  }
+});
+
+test("an SSE frame larger than the socket high-water mark is delivered without a reconnect loop", async () => {
+  const fixture = await createFirstmateFixture("sse-backpressure");
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const server = new DashboardServer({
+    adapter: new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 }),
+    port: 0,
+    brokerOptions: { retention: 8, heartbeatMs: 60_000 },
+    bridgeOptions: { reconcileMs: 60_000 },
+  });
+  await server.start();
+  await server.ready;
+  try {
+    const blob = "z".repeat(64 * 1024);
+    let oversizedBytes = 0;
+    const streamPromise = readSseUntil(`${server.url}events`, (event) => {
+      if (event.type === "fixture.oversized") oversizedBytes = event.payload.blob.length;
+      return event.type === "fixture.oversized.followup";
+    });
+    await waitFor(() => server.broker.clients.size === 1, { message: "SSE client registration" });
+    server.broker.publish("fixture.oversized", { blob });
+    server.broker.publish("fixture.oversized.followup", { ok: true });
+    const followup = await streamPromise;
+    assert.equal(oversizedBytes, blob.length, "the oversized frame must be delivered intact");
+    assert.equal(followup.payload.ok, true, "the client must stay connected after a frame above the 16 KiB socket high-water mark");
+  } finally {
+    await server.close();
+    await fixture.cleanup();
+  }
+});
+
+test("SSE requests beyond the bounded client limit are refused with 503 instead of a retry storm", async () => {
+  const fixture = await createFirstmateFixture("sse-capacity");
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const server = new DashboardServer({
+    adapter: new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 }),
+    port: 0,
+    brokerOptions: { clientLimit: 1, heartbeatMs: 60_000 },
+    bridgeOptions: { reconcileMs: 60_000 },
+  });
+  await server.start();
+  await server.ready;
+  const controller = new AbortController();
+  try {
+    const held = await fetch(`${server.url}events`, { signal: controller.signal });
+    assert.equal(held.status, 200);
+    await waitFor(() => server.broker.clients.size === 1, { message: "first SSE client" });
+
+    const refused = await fetch(`${server.url}events`);
+    assert.equal(refused.status, 503);
+    assert.match(refused.headers.get("content-type"), /text\/plain/);
+    assert.match(await refused.text(), /bounded SSE client limit/);
+    assert.equal(server.broker.clients.size, 1);
+  } finally {
+    controller.abort();
+    await server.close();
+    await fixture.cleanup();
+  }
+});
+
+test("a transient reconcile failure reports bridge.error and recovers to a ready snapshot", async () => {
+  const fixture = await createFirstmateFixture("bridge-recovery");
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 });
+  const server = new DashboardServer({
+    adapter,
+    port: 0,
+    brokerOptions: { retention: 32, heartbeatMs: 60_000 },
+    bridgeOptions: { reconcileMs: 60_000 },
+  });
+  await server.start();
+  await server.ready;
+  try {
+    const readInventory = adapter.readInventory.bind(adapter);
+    let failNext = true;
+    adapter.readInventory = async () => {
+      if (!failNext) return readInventory();
+      failNext = false;
+      throw new Error("transient state directory race");
+    };
+
+    await server.bridge.reconcile("manual");
+    assert.equal(server.bridge.phase, "error");
+    assert.ok(server.broker.events.some((event) => event.type === "bridge.error"));
+    assert.equal(server.bridge.snapshot().phase, "error");
+
+    await server.bridge.reconcile("manual");
+    assert.equal(server.bridge.phase, "ready");
+    assert.equal(server.bridge.error, null);
+    const recovered = await (await fetch(`${server.url}api/snapshot`)).json();
+    assert.equal(recovered.phase, "ready");
+    assert.equal(recovered.error, null);
+  } finally {
+    await server.close();
+    await fixture.cleanup();
+  }
+});
+
 function fakeResponse() {
   return new Writable({ write(_chunk, _encoding, callback) { callback(); } });
+}
+
+function stalledResponse() {
+  const pending = [];
+  return {
+    destroyed: false,
+    writableEnded: false,
+    pending,
+    write(_chunk, callback) {
+      pending.push(callback);
+      return false;
+    },
+    end() { this.writableEnded = true; },
+    once() {},
+    drain() { while (pending.length) pending.shift()?.(); },
+  };
 }
