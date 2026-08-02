@@ -49,6 +49,8 @@ def _matches_type(value: Any, expected: str) -> bool:
 def _validate_format(value: str, format_name: str, path: str, errors: list[str]) -> None:
     try:
         if format_name == "date-time":
+            # `fromisoformat` only accepts a `Z` suffix from 3.11 on, so normalize it
+            # here to keep the `requires-python = ">=3.10"` floor in pyproject.toml honest.
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
                 raise ValueError

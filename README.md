@@ -2,7 +2,7 @@
 
 AI Company OS is a small, standalone foundation for four independently callable roles: **Research**, **Project Validation**, **Idea Validation**, and **Builder**. Independent invocation is the default. A conceptual sequence never causes hidden prerequisite or downstream work; multiple roles run only when the assignment explicitly selects a declared workflow.
 
-The foundation provides real routing, private persistence, JSON validation, bounded run-state recording, policy gates, and confidence-gated handoffs. Model execution is an explicit adapter boundary, so Firstmate—or any direct operator—can supervise a worker without changes to Firstmate core.
+The foundation provides real routing, private persistence, JSON validation, bounded run-state recording, policy gates, and confidence-gated handoffs. Model execution is an explicit adapter boundary, so Firstmate - or any direct operator - can supervise a worker without changes to Firstmate core.
 
 ## Setup
 
@@ -171,7 +171,7 @@ Decision reports are readable Markdown with Mermaid; metadata enables validation
 
 ## Composite resources, checkpoint, and recovery
 
-Each phase accounts for wall-clock minutes, model tokens, monetary cost, tool calls, and download bytes. The first ceiling stops work. Unknown usage remains `unknown` and stops—it is not treated as free. Paid usage defaults to zero until a positive monetary ceiling and operation approval are recorded. Role wall-clock defaults remain 120/240/120 minutes; Builder derives its ceiling from an approved plan.
+Each phase accounts for wall-clock minutes, model tokens, monetary cost, tool calls, and download bytes. The first ceiling stops work. Unknown usage remains `unknown` and stops - it is not treated as free. Paid usage defaults to zero until a positive monetary ceiling and operation approval are recorded. Role wall-clock defaults remain 120/240/120 minutes; Builder derives its ceiling from an approved plan.
 
 Each phase is atomically checkpointed. `run inspect --run ID` verifies state and assignment identity. A workflow run additionally binds the selected contract's version, digest, route, and confidence floors into that identity, so editing the contract file mid-run stops execution instead of silently changing its gates; `run inspect` stays read-only and keeps working, reporting the stored and current contract identity, whether the current contract is `changed`, `missing`, or `unloadable`, and a drift warning; a deleted or invalid contract is diagnosed rather than hidden behind a load error. After interruption, `run resume --run ID --attestation /private/recovery.json` compares checkpoint, source, environment, approval, and immutable artifact identities before continuing; it cannot revive a terminal/resource-exhausted run. A changed workflow contract resumes only when the attestation adds a `workflow_contract_migration` object naming the captain's `approval_id` and both the stored and current contract version/digest, and only when the workflow identity and route are unchanged and no confidence floor is lowered.
 

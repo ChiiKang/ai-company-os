@@ -12,7 +12,7 @@ Builder owns the smallest coherent path from validated requirements to an accept
 
 1. Product plan: assignment-specific measurable functional criteria, named user journeys, scope, exclusions/non-goals, reliability targets, scale assumptions, security/privacy constraints, risks, milestones, and evidence traceability.
 2. Architecture: boundaries, data model, backend, infrastructure, interfaces/endpoints, failure modes, and decisions appropriate to the prototype, with production deferrals disclosed.
-3. UI/UX: information hierarchy, clear states and copy, responsive behavior, accessibility, keyboard use, error recovery, and user testing—not merely attractive screens.
+3. UI/UX: information hierarchy, clear states and copy, responsive behavior, accessibility, keyboard use, error recovery, and user testing - not merely attractive screens.
 4. Integration: contracts and endpoints, authentication/authorization, validation, retries/timeouts, idempotency where needed, observability, and end-to-end data flow.
 5. Implementation: maintainable code, project-local dependencies, migrations/fixtures as needed, and no unrelated production platform.
 6. Quality: automated tests, reliability, security, privacy, and scalability proportional to prototype risk.

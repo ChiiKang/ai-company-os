@@ -22,11 +22,11 @@ Capture raw evidence before interpreting it: source dates, retrieval time, URI, 
 
 Compare evidence to the assignment's metric, target, baseline, and disconfirming condition. State confidence and uncertainty. Select exactly one outcome:
 
-- `success` — target met with evidence references;
-- `continue` — target not met and a useful untested hypothesis remains;
-- `proven-blocker` — evidence establishes a blocker;
-- `exhausted-useful-hypotheses` — remaining attempts would not materially improve the decision;
-- `resource-boundary` — time, iteration, cost, or approved resource is exhausted;
-- `approval-boundary` — the useful next act requires captain approval.
+- `success` - target met with evidence references;
+- `continue` - target not met and a useful untested hypothesis remains;
+- `proven-blocker` - evidence establishes a blocker;
+- `exhausted-useful-hypotheses` - remaining attempts would not materially improve the decision;
+- `resource-boundary` - time, iteration, cost, or approved resource is exhausted;
+- `approval-boundary` - the useful next act requires captain approval.
 
-`continue` starts a new plan. The first composite ceiling reached—wall clock, model tokens, money, tool calls, or download bytes—stops work. Maximum iterations and budgets are hard limits, not targets to consume. Builder's budget must come from an approved plan. Use [`resource-and-recovery.md`](resource-and-recovery.md) for checkpoint inspection/resume and never relabel an incomplete loop as success.
+`continue` starts a new plan. The first composite ceiling reached - wall clock, model tokens, money, tool calls, or download bytes - stops work. Maximum iterations and budgets are hard limits, not targets to consume. Builder's budget must come from an approved plan. Use [`resource-and-recovery.md`](resource-and-recovery.md) for checkpoint inspection/resume and never relabel an incomplete loop as success.

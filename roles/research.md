@@ -28,4 +28,4 @@
 
 ## Completion
 
-Classify confidence with [`procedures/confidence.md`](../procedures/confidence.md), not an unsupported score. End only when the measurable success criteria are evidenced, a blocker is proven, useful hypotheses are exhausted, or a resource/approval boundary is reached. `research complete` means the assignment's research criteria were met—not that all uncertainty disappeared.
+Classify confidence with [`procedures/confidence.md`](../procedures/confidence.md), not an unsupported score. End only when the measurable success criteria are evidenced, a blocker is proven, useful hypotheses are exhausted, or a resource/approval boundary is reached. `research complete` means the assignment's research criteria were met - not that all uncertainty disappeared.

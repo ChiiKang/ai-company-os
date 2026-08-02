@@ -24,7 +24,7 @@ Follow [`procedures/idea-validation.md`](../procedures/idea-validation.md). Anal
 - strongest evidence against the idea and assumptions with the highest decision sensitivity;
 - the cheapest next experiment that can materially reduce uncertainty, with a metric, threshold, cost, and stop rule.
 
-Apply publication and retrieval dates to every material market-size, pricing, funding, traction, competitor, customer, and distribution claim—not only technical sources. Preserve uncertainty and distinguish facts from inference. Competitor absence is not proof of opportunity; competitor presence is not proof the assigned wedge will work.
+Apply publication and retrieval dates to every material market-size, pricing, funding, traction, competitor, customer, and distribution claim - not only technical sources. Preserve uncertainty and distinguish facts from inference. Competitor absence is not proof of opportunity; competitor presence is not proof the assigned wedge will work.
 
 ## Demand limitation
 
