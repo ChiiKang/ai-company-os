@@ -202,4 +202,4 @@ AI Company OS never gets, stores, logs, echoes, or asks for the raw value.
 ./scripts/test.sh
 ```
 
-This runs Python `unittest` plus the public-safety scan. No global package changes are required. The same command is the whole CI job in `.github/workflows/ci.yml`, which runs on every pull request and on pushes to `main`. Public changes must pass automated review/tests, use a pull request, and wait for captain approval; do not merge without it.
+This runs Python `unittest` plus the public-safety scan. No global package changes are required. The same command is the whole CI job in `.github/workflows/ci.yml`, which runs on every pull request and on pushes to `main` against both Python 3.10 and 3.12, so the supported floor above is exercised and not just claimed. Public changes must pass automated review/tests, use a pull request, and wait for captain approval; do not merge without it.
