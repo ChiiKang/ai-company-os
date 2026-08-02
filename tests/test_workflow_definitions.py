@@ -266,14 +266,25 @@ class ContractIdentityTests(unittest.TestCase):
         self.store.save_assignment(self.assignment)
         self.run = create_run(self.store, self.assignment["id"])
         self.original = definitions.workflows()
+        self.original_directory = definitions.workflows_directory
         definitions._WORKFLOWS = deepcopy(self.original)
 
     def tearDown(self):
+        definitions.workflows_directory = self.original_directory
         definitions._WORKFLOWS = self.original
         self.temporary.cleanup()
 
     def change_contract(self, **overrides):
         definitions._WORKFLOWS[WORKFLOW] = replace(self.original[WORKFLOW], digest="f" * 64, **overrides)
+
+    def remove_contract(self):
+        del definitions._WORKFLOWS[WORKFLOW]
+
+    def break_registry(self):
+        empty = tempfile.TemporaryDirectory()
+        self.addCleanup(empty.cleanup)
+        definitions._WORKFLOWS = None
+        definitions.workflows_directory = lambda: Path(empty.name)
 
     def attestation(self, **extra) -> dict:
         identity = self.run["recovery_identity"]
@@ -289,7 +300,10 @@ class ContractIdentityTests(unittest.TestCase):
 
     def migration(self, **overrides) -> dict:
         stored = self.run["recovery_identity"]["workflow_contract"]
-        current = definitions.workflows()[WORKFLOW].identity()
+        try:
+            current = definitions.workflows()[WORKFLOW].identity()
+        except (KeyError, ContractError):
+            current = {"schema_version": stored["schema_version"], "sha256": "f" * 64}
         payload = {
             "approval_id": "captain-migration-1",
             "stored_schema_version": stored["schema_version"],
@@ -372,6 +386,44 @@ class ContractIdentityTests(unittest.TestCase):
         self.assertEqual(self.original[WORKFLOW].digest, migration["from_sha256"])
         self.assertEqual("f" * 64, migration["to_sha256"])
         self.assertIsNone(self.cli_inspect()["workflow_contract"]["drift_warning"])
+
+    def test_missing_contract_is_diagnosed_read_only_and_blocks_every_mutation(self):
+        self.remove_contract()
+        reported = self.cli_inspect()
+        contract = reported["workflow_contract"]
+        self.assertEqual("missing", contract["current_status"])
+        self.assertEqual(self.original[WORKFLOW].digest, contract["stored"]["sha256"])
+        self.assertIsNone(contract["current"])
+        self.assertIn(WORKFLOW, contract["drift_detail"])
+        self.assertEqual(self.run["checkpoint"]["state_sha256"], reported["checkpoint"]["state_sha256"])
+        with self.assertRaises(PolicyError):
+            add_loop_event(
+                self.store,
+                self.run["id"],
+                {"phase": "plan", "duration_minutes": 1, "summary": "plan", "usage": ZERO_USAGE},
+            )
+        with self.assertRaises(PolicyError):
+            resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
+
+    def test_unloadable_registry_is_diagnosed_read_only_and_blocks_every_mutation(self):
+        self.break_registry()
+        contract = self.cli_inspect()["workflow_contract"]
+        self.assertEqual("unloadable", contract["current_status"])
+        self.assertEqual(self.original[WORKFLOW].digest, contract["stored"]["sha256"])
+        self.assertIsNone(contract["current"])
+        self.assertIn("no workflow contracts found", contract["drift_detail"])
+        with self.assertRaises(PolicyError):
+            advance_handoff(self.store, self.run["id"], handoff(self.assignment["id"], self.run["id"]))
+        with self.assertRaises(PolicyError):
+            resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
+
+    def test_inspect_still_refuses_an_edited_assignment_record(self):
+        path = Path(self.temporary.name) / "assignments" / f"{self.assignment['id']}.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["title"] = "edited outside the CLI"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        with self.assertRaises(PolicyError):
+            inspect_run(self.store, self.run["id"])
 
     def test_resume_refuses_a_changed_contract_without_an_explicit_migration(self):
         self.change_contract()

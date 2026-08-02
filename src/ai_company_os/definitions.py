@@ -113,10 +113,10 @@ def workflow_names() -> tuple[str, ...]:
 
 
 def workflow(name: str) -> Workflow:
-    try:
-        return workflows()[name]
-    except KeyError:
-        raise ValueError(f"unknown workflow: {name!r}") from None
+    registry = workflows()
+    if name not in registry:
+        raise ValueError(f"unknown workflow: {name!r}; published workflows are {', '.join(sorted(registry))}")
+    return registry[name]
 
 
 def selected_roles(selection: dict) -> tuple[str, ...]:

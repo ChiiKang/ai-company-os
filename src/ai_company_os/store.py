@@ -81,13 +81,16 @@ class KnowledgeStore:
         ensure_private_directory(self.root / assignment["output_path"])
         return path
 
-    def load_assignment(self, assignment_id: str) -> dict:
+    def read_assignment(self, assignment_id: str) -> dict:
+        """Return the stored record without re-validating it against live contracts."""
         path = self.root / "assignments" / f"{self._safe_id(assignment_id)}.json"
         try:
-            document = json.loads(path.read_text(encoding="utf-8"))
+            return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError(f"cannot load assignment {assignment_id}: {exc}") from exc
-        return validate_document("assignment", document)
+
+    def load_assignment(self, assignment_id: str) -> dict:
+        return validate_document("assignment", self.read_assignment(assignment_id))
 
     def save_run(self, run: dict, *, overwrite: bool = False) -> Path:
         self.initialize()

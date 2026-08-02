@@ -51,10 +51,20 @@ def _verify_checkpoint(run: dict) -> None:
         raise PolicyError("run checkpoint identity mismatch; inspect and recover before continuing")
 
 
-CONTRACT_DRIFT_WARNING = (
-    "the workflow contract changed after this run was checkpointed; no further work is executed until "
-    "run resume attests the stored and current contract identities with a captain migration approval"
-)
+CONTRACT_DRIFT_WARNINGS = {
+    "changed": (
+        "the workflow contract changed after this run was checkpointed; no further work is executed until "
+        "run resume attests the stored and current contract identities with a captain migration approval"
+    ),
+    "missing": (
+        "the workflow contract this run was checkpointed against is no longer published; no further work is "
+        "executed and no migration is possible until that contract is restored"
+    ),
+    "unloadable": (
+        "the published workflow contracts cannot be loaded; no further work is executed and no migration is "
+        "possible until they are valid again"
+    ),
+}
 
 
 def _workflow_identity(name: str | None) -> dict | None:
@@ -66,20 +76,34 @@ def _workflow_identity(name: str | None) -> dict | None:
         raise PolicyError(f"the workflow contract this run was checkpointed against is unusable: {exc}") from exc
 
 
-def _loadable_workflow_identity(run: dict) -> dict | None:
+def _current_contract_state(run: dict) -> tuple[dict | None, str, str | None]:
+    name = run.get("workflow")
+    if not name:
+        return None, "not-applicable", None
     try:
-        return _workflow_identity(run.get("workflow"))
-    except PolicyError:
-        return None
+        return workflow_contract(name).identity(), "current", None
+    except ValueError as exc:
+        return None, "missing", str(exc)
+    except ContractError as exc:
+        return None, "unloadable", str(exc)
 
 
 def workflow_contract_drift(run: dict) -> dict | None:
     """Report a stored/current workflow contract mismatch without changing anything."""
     stored = run["recovery_identity"].get("workflow_contract")
-    current = _loadable_workflow_identity(run)
-    if stored == current:
+    current, status, detail = _current_contract_state(run)
+    if current == stored and status in {"current", "not-applicable"}:
         return None
-    return {"stored": stored, "current": current, "warning": CONTRACT_DRIFT_WARNING}
+    if status in {"current", "not-applicable"}:
+        status = "changed" if stored is not None else "missing"
+        detail = detail or "this run records no workflow selection"
+    return {
+        "stored": stored,
+        "current": current,
+        "current_status": status,
+        "detail": detail,
+        "warning": CONTRACT_DRIFT_WARNINGS[status],
+    }
 
 
 def _require_current_workflow_contract(run: dict) -> None:
@@ -89,11 +113,15 @@ def _require_current_workflow_contract(run: dict) -> None:
 
 
 def inspect_run(store: KnowledgeStore, run_id: str) -> dict:
-    """Read-only verification; contract drift is reported by `workflow_contract_drift`."""
+    """Read-only verification from stored checkpoint data alone.
+
+    Live contracts are never resolved here, so an operator can still read the
+    checkpoint and the contract diagnostics reported by `workflow_contract_drift`
+    when the selected workflow contract is missing or unloadable.
+    """
     run = store.load_run(run_id)
     _verify_checkpoint(run)
-    assignment = store.load_assignment(run["assignment_id"])
-    if _hash(assignment) != run["assignment_sha256"]:
+    if _hash(store.read_assignment(run["assignment_id"])) != run["assignment_sha256"]:
         raise PolicyError("assignment identity changed after run creation")
     return run
 
@@ -206,7 +234,7 @@ def _migrate_workflow_contract(run: dict, attestation: dict) -> None:
             raise PolicyError("the attested workflow contract migration does not apply; the contract is unchanged")
         return
     if migration is None:
-        raise PolicyError(CONTRACT_DRIFT_WARNING)
+        raise PolicyError(drift["warning"])
     if not isinstance(migration, dict) or set(migration) != MIGRATION_FIELDS:
         raise ContractError(
             "resuming a changed workflow contract requires a "

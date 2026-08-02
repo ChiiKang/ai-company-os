@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from .definitions import ROLES, selected_roles, workflow as workflow_contract, workflow_names
+from .definitions import ROLES, selected_roles, workflow as workflow_contract
 from .errors import AICompanyOSError, ContractError
 from .paths import reject_public_report_source, reject_raw_secrets
 from .policy import APPROVAL_OPERATIONS, assess_operation, build_composite_budget
@@ -202,7 +202,9 @@ def command_run_inspect(args: argparse.Namespace) -> int:
             "workflow_contract": {
                 "stored": stored_contract,
                 "current": drift["current"] if drift else stored_contract,
+                "current_status": drift["current_status"] if drift else ("current" if stored_contract else "not-applicable"),
                 "drift_warning": drift["warning"] if drift else None,
+                "drift_detail": drift["detail"] if drift else None,
             },
         }
     )
@@ -291,7 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
     create = assignment_commands.add_parser("create")
     selection = create.add_mutually_exclusive_group(required=True)
     selection.add_argument("--role", choices=ROLES)
-    selection.add_argument("--workflow", choices=list(workflow_names()))
+    selection.add_argument("--workflow", metavar="NAME", help="a workflow contract published in workflows/")
     create.add_argument("--title", required=True)
     create.add_argument("--outcome", required=True, help="outcome requested by the captain")
     create.add_argument("--goal", required=True, help="measurable goal statement")
