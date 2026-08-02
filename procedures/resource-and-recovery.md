@@ -8,7 +8,7 @@ Accepted default role wall-clock ceilings are Research 120 minutes, Project Vali
 
 ## Atomic checkpoints
 
-Each recorded phase is atomically persisted with a sequence and SHA-256 state identity. `run inspect` verifies the checkpoint and assignment identity without loading report bodies, and reports the stored and current workflow contract identity with an explicit drift warning when they differ. It answers from stored checkpoint data alone and never re-validates the assignment against live contracts, so it keeps working when the selected contract is missing or unloadable. Inspection stays read-only: it never migrates a run and never accepts changed rules. Do not edit a run record.
+Each recorded phase is atomically persisted with a sequence and SHA-256 state identity. `run inspect` verifies the checkpoint and assignment identity without loading report bodies, and reports the stored and current workflow contract identity with an explicit drift warning when they differ. It reads the run from its stored checkpoint and never re-validates the assignment against live contracts, so it keeps working when the selected contract is missing or unloadable. Inspection stays read-only: it never migrates a run and never accepts changed rules. Do not edit a run record.
 
 ## Resume
 
