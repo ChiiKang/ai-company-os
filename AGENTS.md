@@ -2,7 +2,8 @@
 
 This file is the project's committed home for project-intrinsic agent knowledge: build, test, release, architecture, and sharp-edge notes that should travel with the code.
 
-- Use `./scripts/test.sh` for the dependency-free test and public-safety gate.
+- Use `./scripts/test.sh` for the dependency-free Python/Node test and public-safety gate.
+- The distributable Pi dashboard lives under `extensions/ai-dashboard/`; use `docs/ai-dashboard.md` as the authoritative integration, privacy, lifecycle, and resource-bound guide.
 - `roles/`, `procedures/`, `workflows/`, and `schemas/` are public contracts; keep runtime behavior aligned with them, especially `ai-company.assignment.v1`. `workflows/*.json` is loaded and validated at runtime and is the only workflow authority; never restate a composition in Python, and enforce every field a contract declares. `schemas/` stays standard JSON Schema: registry-owned enums carry a `generated-enum:` `$comment` and are written by `scripts/sync-schema-enums.py --write`.
 - Captain assignments, reports, experiments, and decisions belong only in the external knowledge root. The authoritative privacy and integration boundaries are in `README.md` and `docs/firstmate-integration-v1.md`.
 - Independent role routing is the default. Only an explicitly selected workflow may contain multiple roles, and every load-bearing handoff claim remains evidence-, confidence-, and scope-gated.

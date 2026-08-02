@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-03T00:00:00Z",
+  "title": "Design System: AI Company Operations",
+  "extensions": {
+    "colorMeta": {
+      "command-charcoal": {"role": "neutral", "displayName": "Command Charcoal", "canonical": "oklch(0.115 0.009 24)", "tonalRamp": ["oklch(0.115 0.009 24)", "oklch(0.16 0.010 24)", "oklch(0.22 0.011 24)", "oklch(0.31 0.012 24)", "oklch(0.44 0.011 24)", "oklch(0.60 0.009 24)", "oklch(0.78 0.007 24)", "oklch(0.92 0.004 24)"]},
+      "signal-crimson": {"role": "primary", "displayName": "Signal Crimson", "canonical": "oklch(0.62 0.205 26)", "tonalRamp": ["oklch(0.18 0.055 26)", "oklch(0.26 0.09 26)", "oklch(0.36 0.14 26)", "oklch(0.48 0.19 26)", "oklch(0.62 0.205 26)", "oklch(0.72 0.16 26)", "oklch(0.84 0.09 26)", "oklch(0.94 0.035 26)"]},
+      "readable-crimson": {"role": "primary", "displayName": "Readable Crimson", "canonical": "oklch(0.72 0.17 26)", "tonalRamp": ["oklch(0.18 0.055 26)", "oklch(0.26 0.09 26)", "oklch(0.36 0.14 26)", "oklch(0.48 0.19 26)", "oklch(0.62 0.205 26)", "oklch(0.72 0.17 26)", "oklch(0.84 0.09 26)", "oklch(0.94 0.035 26)"]},
+      "signal-sage": {"role": "semantic", "displayName": "Working Sage", "canonical": "oklch(0.74 0.075 148)", "tonalRamp": ["oklch(0.18 0.025 148)", "oklch(0.28 0.045 148)", "oklch(0.40 0.065 148)", "oklch(0.54 0.08 148)", "oklch(0.68 0.08 148)", "oklch(0.78 0.065 148)", "oklch(0.87 0.04 148)", "oklch(0.95 0.018 148)"]},
+      "signal-amber": {"role": "semantic", "displayName": "Attention Amber", "canonical": "oklch(0.78 0.115 76)", "tonalRamp": ["oklch(0.18 0.035 76)", "oklch(0.28 0.065 76)", "oklch(0.40 0.095 76)", "oklch(0.54 0.12 76)", "oklch(0.68 0.125 76)", "oklch(0.78 0.115 76)", "oklch(0.88 0.07 76)", "oklch(0.95 0.025 76)"]}
+    },
+    "typographyMeta": {
+      "title": {"displayName": "Operational Title", "purpose": "Mode and inspector headings only."},
+      "body": {"displayName": "Task Text", "purpose": "Assignments, explanations, and recovery copy."},
+      "label": {"displayName": "Telemetry Label", "purpose": "States, filters, timestamps, and compact values."}
+    },
+    "shadows": [
+      {"name": "shell-separation", "value": "0 24px 64px oklch(0.07 0.008 24 / 0.55)", "purpose": "Wide-screen application shell separation only."}
+    ],
+    "motion": [
+      {"name": "state-fast", "value": "160ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Selection and compact control feedback."},
+      {"name": "state-standard", "value": "220ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Lifecycle and view-state transitions."},
+      {"name": "radar-cap", "value": "12fps", "purpose": "Maximum topology liveness when visible and not static."}
+    ],
+    "breakpoints": [
+      {"name": "narrow", "value": "640px"},
+      {"name": "tablet", "value": "820px"},
+      {"name": "wide", "value": "1180px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Mode Tab",
+      "kind": "nav",
+      "refersTo": "tab-active",
+      "description": "Square, keyboard-roving navigation for the three operational modes.",
+      "html": "<button class=\"ds-mode-tab\" aria-selected=\"true\">FLOWLINE</button>",
+      "css": ".ds-mode-tab { min-height: 44px; padding: 12px 16px; border: 1px solid oklch(0.35 0.014 24); background: oklch(0.195 0.011 24); color: oklch(0.91 0.009 45); font: 650 .75rem/1.3 SFMono-Regular, monospace; letter-spacing: .09em; } .ds-mode-tab:hover { border-color: oklch(0.60 0.010 45); } .ds-mode-tab:focus-visible { outline: 2px solid oklch(0.62 0.205 26); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Label",
+      "kind": "chip",
+      "refersTo": "status-working",
+      "description": "Text-first state marker with a geometric dot.",
+      "html": "<span class=\"ds-status\"><i aria-hidden=\"true\"></i>WORKING</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid oklch(0.74 0.075 148); color: oklch(0.74 0.075 148); background: oklch(0.155 0.010 24); font: 650 .75rem/1.3 SFMono-Regular, monospace; letter-spacing: .09em; } .ds-status i { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }"
+    },
+    {
+      "name": "Agent Row",
+      "kind": "button",
+      "description": "A dense selectable assignment row with explicit lifecycle copy.",
+      "html": "<button class=\"ds-agent\"><span>SABLE-03</span><small>Resolve billing retry cohort</small><b>WORKING</b></button>",
+      "css": ".ds-agent { width: 100%; min-height: 56px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px; border: 1px solid oklch(0.35 0.014 24); background: oklch(0.155 0.010 24); color: oklch(0.91 0.009 45); text-align: left; } .ds-agent small { color: oklch(0.73 0.010 45); } .ds-agent b { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: oklch(0.74 0.075 148); font: 650 .75rem SFMono-Regular, monospace; } .ds-agent:hover { background: oklch(0.195 0.011 24); } .ds-agent:focus-visible { outline: 2px solid oklch(0.62 0.205 26); outline-offset: 2px; }"
+    },
+    {
+      "name": "Filter Field",
+      "kind": "input",
+      "description": "A visible-label search control for the local fleet projection.",
+      "html": "<label class=\"ds-field\">FILTER TASKS<input type=\"search\" placeholder=\"Agent, task, or workstream\"></label>",
+      "css": ".ds-field { display: grid; gap: 6px; color: oklch(0.73 0.010 45); font: 650 .75rem SFMono-Regular, monospace; letter-spacing: .09em; } .ds-field input { min-height: 44px; padding: 10px 12px; border: 1px solid oklch(0.35 0.014 24); background: oklch(0.115 0.009 24); color: oklch(0.91 0.009 45); } .ds-field input:focus-visible { outline: 2px solid oklch(0.62 0.205 26); outline-offset: 2px; }"
+    },
+    {
+      "name": "Topology Node",
+      "kind": "custom",
+      "description": "An accessible agent node bound to a real workstream hub.",
+      "html": "<button class=\"ds-node\"><i aria-hidden=\"true\"></i><span>ARIA-09<br><small>JOINING</small></span></button>",
+      "css": ".ds-node { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; background: oklch(0.115 0.009 24); color: oklch(0.62 0.205 26); font: 650 .75rem SFMono-Regular, monospace; text-align: left; } .ds-node i { width: 10px; height: 10px; border: 1px solid currentColor; border-radius: 999px; box-shadow: inset 0 0 0 2px oklch(0.115 0.009 24); background: currentColor; } .ds-node small { color: oklch(0.73 0.010 45); } .ds-node:focus-visible { outline: 2px solid oklch(0.62 0.205 26); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Local Operations Plotter",
+    "overview": "A captain reads this interface like a well-made technical plotting desk: a dark physical field, fine registration lines, compact labels, restrained signal color, and one meaningful spatial model.",
+    "keyCharacteristics": [
+      "Dense, square-edged, broadcast-technical composition with varied spacing rhythm.",
+      "Flowline is the default silhouette; topology becomes the dominant live-operations silhouette.",
+      "Semantic HTML, CSS, and inline SVG implement the approved ingredients.",
+      "Motion is limited to state transitions, a restrained joining signal, and capped radar liveness."
+    ],
+    "rules": [
+      {"name": "The Rare Crimson Rule", "body": "Crimson marks a state transition, active selection, or focus. It never fills inactive surfaces.", "section": "colors"},
+      {"name": "The Written State Rule", "body": "Color never carries lifecycle meaning alone.", "section": "colors"},
+      {"name": "The Tonal Elevation Rule", "body": "Higher operational surfaces are lighter, not blurrier.", "section": "elevation"}
+    ],
+    "dos": [
+      "Do open on Flowline and keep whole-company scope selected by default.",
+      "Do cap continuous radar liveness at 12 FPS, pause it while hidden, and persist static mode."
+    ],
+    "donts": [
+      "Don't build a generic SaaS admin dashboard from oversized metric cards and repeated identical card grids.",
+      "Don't treat append-only status entries as current truth.",
+      "Don't expose private report bodies, prompt files, raw local paths, secrets, or credential values."
+    ]
+  }
+}

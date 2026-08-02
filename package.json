@@ -1,0 +1,38 @@
+{
+  "name": "@chiikang/ai-company-os",
+  "version": "0.1.0",
+  "description": "AI Company OS foundation with a read-only Firstmate fleet dashboard for Pi",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "firstmate",
+    "dashboard",
+    "observability"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "extensions/ai-dashboard",
+    "README.md",
+    "PRODUCT.md",
+    "DESIGN.md",
+    "docs/ai-dashboard.md",
+    "docs/ai-dashboard-performance.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/ai-dashboard/index.js"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "scripts": {
+    "test": "npm run test:dashboard",
+    "test:dashboard": "node --test --test-concurrency=1 tests/dashboard/*.test.mjs"
+  }
+}
