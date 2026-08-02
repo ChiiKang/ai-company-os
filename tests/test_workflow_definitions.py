@@ -360,7 +360,11 @@ class ContractIdentityTests(unittest.TestCase):
         contract = reported["workflow_contract"]
         self.assertEqual(self.original[WORKFLOW].digest, contract["stored"]["sha256"])
         self.assertEqual("f" * 64, contract["current"]["sha256"])
+        self.assertEqual("changed", contract["current_status"])
         self.assertIsNotNone(contract["drift_warning"])
+        self.assertEqual(
+            f"sha256: {self.original[WORKFLOW].digest!r} is now {'f' * 64!r}", contract["drift_detail"]
+        )
         identity = reported["recovery_identity"]
         resumed = resume_run(
             self.store,
@@ -416,6 +420,13 @@ class ContractIdentityTests(unittest.TestCase):
             advance_handoff(self.store, self.run["id"], handoff(self.assignment["id"], self.run["id"]))
         with self.assertRaises(PolicyError):
             resume_run(self.store, self.run["id"], self.attestation(workflow_contract_migration=self.migration()))
+
+    def test_a_stored_contract_without_a_workflow_selection_is_reported_missing(self):
+        orphan = {"workflow": None, "recovery_identity": dict(self.run["recovery_identity"])}
+        drift = workflow_contract_drift(orphan)
+        self.assertEqual("missing", drift["current_status"])
+        self.assertEqual("this run records no workflow selection", drift["detail"])
+        self.assertIsNone(workflow_contract_drift({"workflow": None, "recovery_identity": {}}))
 
     def test_inspect_still_refuses_an_edited_assignment_record(self):
         path = Path(self.temporary.name) / "assignments" / f"{self.assignment['id']}.json"

@@ -26,6 +26,6 @@ Put those exact values in a private v1 resume attestation and call `run resume`.
 
 A workflow run also stores the selected contract's `schema_version` and digest. If that contract changes mid-run, `run event` and `run handoff` stop immediately, while `run inspect` still succeeds and returns `workflow_contract.stored`, `workflow_contract.current`, `workflow_contract.current_status`, and a drift warning.
 
-`current_status` is `current`, `changed`, `missing`, `unloadable`, or `not-applicable`, and `drift_detail` carries the loader's own diagnosis. A `missing` or `unloadable` contract keeps every mutating command blocked and cannot be migrated: restore a valid published contract first, then resume.
+`current_status` is `current`, `changed`, `missing`, `unloadable`, or `not-applicable`. `drift_detail` explains that status: the identity fields that differ for a `changed` contract, and the loader's own message for a `missing` or `unloadable` one. A `missing` or `unloadable` contract keeps every mutating command blocked and cannot be migrated: restore a valid published contract first, then resume.
 
 Resuming a `changed` contract requires an additional `workflow_contract_migration` object in the attestation naming `approval_id`, `stored_schema_version`, `stored_sha256`, `current_schema_version`, and `current_sha256`. Both identities must match exactly what `run inspect` reported, the workflow name and declared route must be unchanged, and no declared confidence floor may be lowered. Anything else needs a new captain-approved assignment.

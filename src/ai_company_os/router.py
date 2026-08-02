@@ -88,15 +88,26 @@ def _current_contract_state(run: dict) -> tuple[dict | None, str, str | None]:
         return None, "unloadable", str(exc)
 
 
+def _identity_difference(stored: dict | None, current: dict) -> str:
+    if stored is None:
+        return "this run has no checkpointed workflow contract identity"
+    return "; ".join(
+        f"{key}: {stored.get(key)!r} is now {current.get(key)!r}"
+        for key in sorted(set(stored) | set(current))
+        if stored.get(key) != current.get(key)
+    )
+
+
 def workflow_contract_drift(run: dict) -> dict | None:
     """Report a stored/current workflow contract mismatch without changing anything."""
     stored = run["recovery_identity"].get("workflow_contract")
     current, status, detail = _current_contract_state(run)
     if current == stored and status in {"current", "not-applicable"}:
         return None
-    if status in {"current", "not-applicable"}:
-        status = "changed" if stored is not None else "missing"
-        detail = detail or "this run records no workflow selection"
+    if status == "not-applicable":
+        status, detail = "missing", "this run records no workflow selection"
+    elif status == "current":
+        status, detail = "changed", _identity_difference(stored, current)
     return {
         "stored": stored,
         "current": current,
