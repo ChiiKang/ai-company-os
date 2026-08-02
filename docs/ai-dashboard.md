@@ -41,7 +41,7 @@ Resolution is deterministic and local:
 
 `*.status` lines are append-only **event history**. They populate the ledger but never determine the current badge. Whenever current state matters, the adapter runs the authoritative `bin/fm-crew-state.sh <id>` reader without a shell, with bounded output, timeout, concurrency, and an allowlisted environment. The interface labels the current-truth source in the inspector.
 
-The bridge watches only the selected `state/` directory and `data/backlog.md`. File signals share one 140 ms debounce path. A full bounded reconciliation every 30 seconds recovers create/remove/rename races and watcher loss. A task record created after bridge startup emits a joining event and appears immediately; its restrained joining signal lasts four seconds, while the inspector still shows authoritative current truth. The `NEW` marker remains until acknowledged in that browser.
+The bridge watches only the selected `state/` directory and `data/backlog.md`. File signals share one 140 ms debounce path. A full bounded reconciliation every 30 seconds recovers create/remove/rename races and watcher loss. The first inventory that actually succeeds is the baseline, so a startup reconciliation that fails and later recovers does not announce the existing fleet as newly joined. A task record created after that baseline emits a joining event and appears immediately; its restrained joining signal lasts four seconds, while the inspector still shows authoritative current truth. The `NEW` marker remains until acknowledged in that browser.
 
 ## Read-only privacy boundary
 

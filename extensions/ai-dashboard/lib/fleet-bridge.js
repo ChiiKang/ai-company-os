@@ -29,6 +29,7 @@ export class FleetBridge {
     this.pendingIds = new Set();
     this.reconciling = false;
     this.rerunRequested = false;
+    this.hasReconciled = false;
     this.closed = false;
     this.abortController = new AbortController();
     this.phase = "loading";
@@ -88,7 +89,7 @@ export class FleetBridge {
       const previousIds = new Set(this.tasks.keys());
       const newIds = inventory.tasks.filter((task) => !previousIds.has(task.id)).map((task) => task.id);
       const removedIds = [...previousIds].filter((id) => !nextIds.has(id));
-      const isInitial = reason === "initial";
+      const isInitial = !this.hasReconciled;
 
       for (const baseTask of inventory.tasks) {
         const previous = this.tasks.get(baseTask.id);
@@ -126,6 +127,7 @@ export class FleetBridge {
       }
 
       this.#mergeHistory(inventory.histories, isInitial);
+      this.hasReconciled = true;
 
       const fullReconcile = isInitial || reason === "full" || reason === "manual" || reason === "periodic";
       const requested = new Set(changedIds.filter((id) => this.tasks.has(id)));

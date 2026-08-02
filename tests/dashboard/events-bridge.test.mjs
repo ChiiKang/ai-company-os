@@ -4,6 +4,7 @@ import test from "node:test";
 import { EventBroker } from "../../extensions/ai-dashboard/lib/event-broker.js";
 import { DashboardServer } from "../../extensions/ai-dashboard/lib/dashboard-server.js";
 import { FirstmateAdapter, resolveFirstmateIntegration } from "../../extensions/ai-dashboard/lib/firstmate-adapter.js";
+import { FleetBridge } from "../../extensions/ai-dashboard/lib/fleet-bridge.js";
 import { createFirstmateFixture, readSseUntil, waitFor } from "./helpers.mjs";
 
 test("server event retention and client count are bounded", () => {
@@ -231,6 +232,63 @@ test("a transient reconcile failure reports bridge.error and recovers to a ready
     assert.equal(recovered.error, null);
   } finally {
     await server.close();
+    await fixture.cleanup();
+  }
+});
+
+test("a failed initial reconcile still treats the first successful inventory as the baseline", async () => {
+  const fixture = await createFirstmateFixture("bridge-initial-failure");
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 });
+  const broker = new EventBroker({ retention: 128, heartbeatMs: 60_000 });
+  const bridge = new FleetBridge({ adapter, broker, debounceMs: 30, reconcileMs: 60_000, joiningMs: 2_000 });
+  const readInventory = adapter.readInventory.bind(adapter);
+  let failNext = true;
+  adapter.readInventory = async () => {
+    if (!failNext) return readInventory();
+    failNext = false;
+    throw Object.assign(new Error("ENOENT: the Firstmate state directory is not mounted yet"), { code: "ENOENT" });
+  };
+
+  try {
+    await bridge.start();
+    assert.equal(bridge.phase, "error");
+    assert.equal(bridge.tasks.size, 0);
+    assert.equal(bridge.hasReconciled, false);
+
+    await bridge.reconcile("periodic");
+    assert.equal(bridge.phase, "ready");
+    assert.equal(bridge.hasReconciled, true);
+    assert.deepEqual([...bridge.tasks.keys()], ["alpha-task"]);
+    const alpha = bridge.tasks.get("alpha-task");
+    assert.equal(alpha.newAgent, false, "a pre-existing agent must not be marked new after a failed first reconcile");
+    assert.equal(alpha.firstSeenAfterBridgeStart, false);
+    assert.equal(alpha.joiningUntil, 0);
+    assert.equal(
+      broker.events.some((event) => event.type === "task.spawned"),
+      false,
+      "recovering the baseline must not announce pre-existing agents as joining",
+    );
+    assert.equal(
+      broker.events.some((event) => event.type === "history.event"),
+      false,
+      "pre-existing status history must be imported silently, not republished as live observations",
+    );
+    assert.ok(bridge.ledger.some((event) => event.taskId === "alpha-task" && event.historical));
+
+    await fixture.addTask("beta-task", { project: "beta", status: "working: beta underway" });
+    await waitFor(async () => {
+      await bridge.reconcile("full");
+      return bridge.tasks.has("beta-task");
+    }, { message: "post-baseline spawn" });
+    const beta = bridge.tasks.get("beta-task");
+    assert.equal(beta.newAgent, true, "a genuinely new agent must stay visible after the baseline");
+    assert.equal(beta.firstSeenAfterBridgeStart, true);
+    assert.ok(beta.joiningUntil > 0);
+    assert.ok(broker.events.some((event) => event.type === "task.spawned" && event.payload?.task?.id === "beta-task"));
+  } finally {
+    bridge.close();
+    broker.close();
     await fixture.cleanup();
   }
 });
