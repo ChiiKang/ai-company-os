@@ -7,6 +7,12 @@ build/
 dist/
 .coverage
 
+# Node install artifacts (the runtime itself stays dependency-free)
+node_modules/
+package-lock.json
+npm-debug.log*
+*.tgz
+
 # Credentials
 .env
 .env.*

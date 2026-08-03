@@ -6,7 +6,7 @@ The foundation provides real routing, private persistence, JSON validation, boun
 
 ## Setup
 
-Requires Python 3.10+ and Git. There are no runtime or development dependencies.
+The core requires Python 3.10+ and Git. The optional Pi dashboard package requires Node.js 20+ and Pi. Both surfaces use standard-library code and add no third-party runtime or development package dependencies.
 
 ```sh
 git clone https://github.com/ChiiKang/ai-company-os.git
@@ -31,11 +31,12 @@ roles/          public role contracts
 procedures/     reusable intake, evidence, planning, design, integration, acceptance
 workflows/      optional explicit compositions, loaded at runtime as the only workflow authority
 schemas/        strict standard JSON Schema assignment, workflow, and artifact contracts
-docs/           stable external integration contract
+docs/           stable integration contracts and dashboard operations guide
 src/            policy, routing, loop, validation, private storage, vault boundary
+extensions/     distributable Pi dashboard extension and built-in localhost UI
 bin/            standalone CLI
-scripts/        reproducible tests, generated schema enum sync, and public-safety check
-tests/          unit and end-to-end local workflow tests
+scripts/        reproducible tests, generated schema enum sync, public-safety check, dashboard dev runner
+tests/          Python workflows plus Node dashboard integration tests
 ```
 
 ```mermaid
@@ -192,6 +193,18 @@ export AUTOMIC_VAULT_CLI=/path/to/av
 
 AI Company OS never gets, stores, logs, echoes, or asks for the raw value.
 
+## Read-only AI Company dashboard
+
+This repository is also a discoverable Pi package. After the dashboard change is merged, install it directly from GitHub:
+
+```sh
+pi install git:github.com/ChiiKang/ai-company-os
+```
+
+Set `FM_HOME` to the Firstmate operational home, start Pi, and run `/aidashboard`. When the operational home and tracked Firstmate code root differ, also set `FM_ROOT_OVERRIDE` so the dashboard can call the authoritative `bin/fm-crew-state.sh <id>` reader. The command starts or reuses one `127.0.0.1` server, opens the default browser, reports the URL, and releases session-owned resources when Pi shuts down.
+
+The dashboard is read-only and sanitized. Flowline is the default planning view, Operations Constellation maps live tasks to real workstreams, and Event Ledger labels status entries as history rather than current truth. One SSE bridge carries bounded updates to every panel; there are no per-panel polling loops. See [`docs/ai-dashboard.md`](docs/ai-dashboard.md) for configuration, security, resource ceilings, and troubleshooting, and [`docs/ai-dashboard-performance.md`](docs/ai-dashboard-performance.md) for measured evidence.
+
 ## Firstmate contract
 
 [`docs/firstmate-integration-v1.md`](docs/firstmate-integration-v1.md) defines the stable JSON CLI/file boundary. Firstmate routes natural language to exactly one role or an explicitly requested workflow, supervises approval identifiers and model execution, stores artifacts, and returns the local report path. The CLI remains fully independent of Firstmate.
@@ -202,4 +215,4 @@ AI Company OS never gets, stores, logs, echoes, or asks for the raw value.
 ./scripts/test.sh
 ```
 
-This runs Python `unittest` plus the public-safety scan. No global package changes are required. The same command is the whole CI job in `.github/workflows/ci.yml`, which runs on every pull request and on pushes to `main` against both Python 3.10 and 3.12, so the supported floor above is exercised and not just claimed. Public changes must pass automated review/tests, use a pull request, and wait for captain approval; do not merge without it.
+This runs Python `unittest`, the Node dashboard tests, and the public-safety scan. No global package changes are required. The same command is the whole CI job in `.github/workflows/ci.yml`, which runs on every pull request and on pushes to `main` against Python 3.10 and 3.12 with Node 20, so the supported floors above are exercised and not just claimed. Public changes must pass automated review/tests, use a pull request, and wait for captain approval; do not merge without it.

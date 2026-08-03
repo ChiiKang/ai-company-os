@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#181415">
+  <meta name="description" content="A read-only localhost dashboard for planning and observing a Firstmate AI company fleet.">
+  <title>AI Company Operations</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-motion="eco">
+  <a class="skip-link" href="#main-content">Skip to fleet dashboard</a>
+  <div class="shell">
+    <header class="system-spine">
+      <div class="brand-lockup" aria-label="AI Company local operations">
+        <span class="brand-mark" aria-hidden="true"><i></i></span>
+        <span><b>AI COMPANY</b><small>LOCAL OPERATIONS</small></span>
+      </div>
+      <div class="system-title">
+        <span class="eyebrow">READ-ONLY FLEET</span>
+        <strong id="mode-heading">Flowline planning</strong>
+      </div>
+      <div class="system-actions">
+        <output class="connection-state" id="connection-state" aria-live="polite" data-state="connecting"><i aria-hidden="true"></i><span>Connecting</span></output>
+        <button class="instrument-button" id="motion-toggle" type="button" aria-pressed="false" title="Use persistent static mode">ECO / 12 FPS</button>
+      </div>
+    </header>
+
+    <nav class="mode-tabs" aria-label="Dashboard views" role="tablist">
+      <button id="tab-flowline" role="tab" aria-selected="true" aria-controls="panel-flowline" tabindex="0" data-mode="flowline" type="button"><span>01</span> Flowline</button>
+      <button id="tab-operations" role="tab" aria-selected="false" aria-controls="panel-operations" tabindex="-1" data-mode="operations" type="button"><span>02</span> Operations constellation</button>
+      <button id="tab-ledger" role="tab" aria-selected="false" aria-controls="panel-ledger" tabindex="-1" data-mode="ledger" type="button"><span>03</span> Event ledger</button>
+      <div class="scope-readout"><span>FOCUS</span><b>Whole company</b></div>
+    </nav>
+
+    <section class="pulse-rail" aria-label="Fleet pulse">
+      <div><span>Agents</span><b id="metric-agents">--</b></div>
+      <div><span>Working</span><b id="metric-working">--</b></div>
+      <div><span>Attention</span><b id="metric-attention">--</b></div>
+      <div><span>Queued</span><b id="metric-queued">--</b></div>
+      <div><span>Events retained</span><b id="metric-events">0 / 200</b></div>
+      <div><span>Runtime memory</span><b id="metric-memory">-- MB</b></div>
+    </section>
+
+    <section class="fleet-tools" aria-label="Fleet filters">
+      <label class="search-field" for="fleet-search"><span>FILTER AGENTS AND TASKS</span><input id="fleet-search" type="search" autocomplete="off" placeholder="Name, assignment, or workstream"></label>
+      <div class="filter-set" role="group" aria-label="State filter">
+        <button type="button" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" data-filter="attention" aria-pressed="false">Needs attention</button>
+        <button type="button" data-filter="new" aria-pressed="false">New</button>
+        <button type="button" data-filter="completed" aria-pressed="false">Completed</button>
+      </div>
+      <button class="acknowledge-all" id="acknowledge-all" type="button" hidden>Acknowledge new agents <span id="new-count">0</span></button>
+    </section>
+
+    <main id="main-content" class="workspace-shell" tabindex="-1">
+      <div class="mode-stage">
+        <section id="panel-flowline" role="tabpanel" aria-labelledby="tab-flowline" class="mode-panel">
+          <header class="panel-intro">
+            <div><span class="eyebrow">DAILY PLANNING / DEFAULT</span><h1>Flowline</h1></div>
+            <p>Read work from queued intent through verified completion. Live agent state is reconciled independently from event history.</p>
+          </header>
+          <div id="flowline-board" class="flowline-board" aria-live="polite">
+            <div class="loading-state" role="status"><i aria-hidden="true"></i><span>Loading local fleet plan</span></div>
+          </div>
+        </section>
+
+        <section id="panel-operations" role="tabpanel" aria-labelledby="tab-operations" class="mode-panel" hidden>
+          <header class="panel-intro">
+            <div><span class="eyebrow">LIVE OPERATIONS</span><h1>Operations constellation</h1></div>
+            <p>Agent position follows actual workstream assignment. Routes and hubs are derived from the current local fleet, never sample decoration.</p>
+          </header>
+          <div class="operations-grid">
+            <section class="roster-region" aria-labelledby="roster-heading">
+              <header><h2 id="roster-heading">Agent roster</h2><span id="roster-count">0 visible</span></header>
+              <div id="agent-roster" class="agent-roster"></div>
+            </section>
+            <section class="topology-region" aria-labelledby="topology-heading">
+              <header><div><h2 id="topology-heading">Whole-company topology</h2><span>Node position = assigned workstream</span></div><span class="topology-readout" id="topology-readout">0 workstreams</span></header>
+              <div class="state-legend" aria-label="Agent state legend"><span class="state-working"><i></i>Working</span><span class="state-joining"><i></i>Joining</span><span class="state-waiting"><i></i>Waiting on external dependency</span><span class="state-blocked"><i></i>Blocked / attention needed</span><span class="state-completed"><i></i>Completed</span><span class="state-unavailable"><i></i>Unavailable</span></div>
+              <div class="topology" id="topology">
+                <svg id="topology-svg" viewBox="0 0 760 520" role="img" aria-labelledby="topology-svg-title topology-svg-desc">
+                  <title id="topology-svg-title">Live fleet workstream topology</title>
+                  <desc id="topology-svg-desc">Agents connected to the projects or workstreams they are currently assigned to.</desc>
+                </svg>
+                <div id="topology-nodes" class="topology-nodes"></div>
+                <div id="topology-empty" class="topology-empty" hidden>No live agents are available for the topology.</div>
+              </div>
+              <footer><span>Transport <b>SSE / one bridge</b></span><span>Current truth <b>authoritative reader</b></span><span>Motion <b id="motion-readout">capped 12 FPS</b></span></footer>
+            </section>
+          </div>
+        </section>
+
+        <section id="panel-ledger" role="tabpanel" aria-labelledby="tab-ledger" class="mode-panel" hidden>
+          <header class="panel-intro">
+            <div><span class="eyebrow">CHRONOLOGY / DEBUG</span><h1>Event ledger</h1></div>
+            <p>Status entries remain historical observations. Current task state always comes from the authoritative reconciler shown in the inspector.</p>
+          </header>
+          <div class="ledger-region">
+            <header><span>Newest observed first</span><b id="ledger-bound">0 of 200 browser records</b></header>
+            <div class="ledger-scroll">
+              <table class="event-table">
+                <caption>Recent local fleet lifecycle and status-history events</caption>
+                <thead><tr><th scope="col">Observed</th><th scope="col">Source</th><th scope="col">Classification</th><th scope="col">Event</th><th scope="col">Workstream</th><th scope="col">Evidence</th></tr></thead>
+                <tbody id="event-body"></tbody>
+              </table>
+            </div>
+            <div id="ledger-empty" class="state-message compact" hidden><strong>No fleet events yet</strong><span>New joins, reconciled state transitions, and bounded status history will appear here.</span></div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="inspector" aria-labelledby="inspector-heading">
+        <header><div><span class="eyebrow">SELECTION</span><h2 id="inspector-heading">Live inspector</h2></div><span class="readonly-tag">Read only</span></header>
+        <div id="inspector-body" class="inspector-body" aria-live="polite">
+          <div class="state-message compact"><strong>No agent selected</strong><span>Select an agent or task to inspect its assignment and reconciled state.</span></div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="system-footer">
+      <span id="bridge-detail">One local process / one SSE bridge / no panel polling</span>
+      <span id="last-reconciled">Waiting for first reconciliation</span>
+    </footer>
+  </div>
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>
