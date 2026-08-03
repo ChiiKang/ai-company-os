@@ -331,6 +331,33 @@ test("status history stays chronological and is never republished when the tail 
   }
 });
 
+test("ledger keys stay unique for a task id that looks like a credential prefix", async () => {
+  const fixture = await createFirstmateFixture("ledger-key-identity");
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 });
+  const broker = new EventBroker({ retention: 64, heartbeatMs: 60_000 });
+  const bridge = new FleetBridge({ adapter, broker, reconcileMs: 60_000, joiningMs: 0 });
+
+  try {
+    await bridge.reconcile("initial");
+    await fixture.addTask("secret", { project: "beta", status: "working: first observation" });
+    await bridge.reconcile("full");
+    await appendFile(path.join(fixture.stateDir, "secret.status"), "done: second observation\n");
+    await bridge.reconcile("full");
+
+    const events = bridge.ledger.filter((event) => event.taskId === "secret");
+    assert.ok(events.length >= 3, "the credential-shaped task id must still produce distinct ledger rows");
+    const keys = events.map((event) => event.key);
+    assert.equal(new Set(keys).size, keys.length, "machine-generated keys must not be collapsed by secret redaction");
+    assert.equal(keys.some((key) => key.includes("redacted")), false);
+    assert.ok(keys.every((key) => key.length <= 180));
+  } finally {
+    bridge.close();
+    broker.close();
+    await fixture.cleanup();
+  }
+});
+
 test("an acknowledged agent keeps its identity when a task record degrades", async () => {
   const fixture = await createFirstmateFixture("ack-stability");
   const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });

@@ -308,7 +308,7 @@ export class FleetBridge {
 
   #appendLedger(event, publish) {
     const normalized = {
-      key: sanitizeText(event.key || `${event.type}:${Date.now()}`, 180),
+      key: boundedKey(event.key || `${event.type}:${Date.now()}`),
       type: event.type,
       taskId: safeId(event.taskId) ?? null,
       source: sanitizeText(event.source || "LOCAL", 72),
@@ -391,6 +391,10 @@ function appendedHistory(previous, next) {
     if (sameEvents(previous.slice(-overlap), next.slice(0, overlap))) return next.slice(overlap);
   }
   return next.slice(-Math.min(next.length, 10));
+}
+
+function boundedKey(value) {
+  return String(value).replace(/[^A-Za-z0-9._:@-]+/g, "-").slice(0, 180);
 }
 
 function sameEvents(left, right) {

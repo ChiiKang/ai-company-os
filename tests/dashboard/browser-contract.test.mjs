@@ -72,7 +72,49 @@ test("agents sharing one workstream stay non-overlapping at narrow, tablet, and 
   }
 
   const crowded = topologyLayout(tasks, { width: 328, height: 470 });
-  assert.ok(crowded.hubs[0].label.length <= crowded.hubs[0].name.length, "hub labels must stay bounded to their arc");
+  assert.ok(crowded.hubs[0].label.length <= crowded.hubs[0].name.length, "hub labels must stay bounded to their cell");
+});
+
+test("hub markers and workstream labels are never occluded by agent cards", () => {
+  const workstreams = ["Platform reliability workstream", "Beta", "Gamma delivery", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota"];
+  const tasks = Array.from({ length: 30 }, (_, index) => ({
+    id: `agent-${index}`,
+    agentName: `AGENT-${index}`,
+    title: "Assigned delivery",
+    workstream: workstreams[index % workstreams.length],
+    state: "working",
+    displayState: "working",
+  }));
+
+  for (const viewport of [{ width: 328, height: 470 }, { width: 620, height: 600 }, { width: 980, height: 560 }, { width: 1440, height: 720 }]) {
+    const label = `${viewport.width}x${viewport.height}`;
+    const layout = topologyLayout(tasks, viewport);
+    assert.ok(layout.hubs.length > 0, `${label} must render at least one workstream hub`);
+    assert.ok(layout.nodes.length > 0, `${label} must render at least one agent`);
+
+    for (const hub of layout.hubs) {
+      assert.ok(hub.width <= layout.cellWidth + 0.01, `${label} hub ${hub.name} is wider than its cell`);
+      assert.ok(hub.height <= layout.cellHeight + 0.01, `${label} hub ${hub.name} is taller than its cell`);
+      assert.ok(hub.x - hub.width / 2 >= -0.01 && hub.x + hub.width / 2 <= layout.width + 0.01, `${label} hub ${hub.name} left the board`);
+      assert.ok(hub.y - hub.height / 2 >= -0.01 && hub.y + hub.height / 2 <= layout.height + 0.01, `${label} hub ${hub.name} left the board`);
+
+      for (const node of layout.nodes) {
+        const overlaps = Math.abs(hub.x - node.x) < (hub.width + layout.nodeWidth) / 2 - 0.01
+          && Math.abs(hub.y - node.y) < (hub.height + layout.nodeHeight) / 2 - 0.01;
+        assert.equal(overlaps, false, `${label} agent card ${node.task.id} occludes hub ${hub.name}`);
+      }
+      for (const other of layout.hubs) {
+        if (other === hub) continue;
+        const overlaps = Math.abs(hub.x - other.x) < (hub.width + other.width) / 2 - 0.01
+          && Math.abs(hub.y - other.y) < (hub.height + other.height) / 2 - 0.01;
+        assert.equal(overlaps, false, `${label} hubs ${hub.name} and ${other.name} overlap`);
+      }
+    }
+
+    assert.ok(layout.hubLabelOffset + 9 <= layout.cellHeight / 2 + 0.01, `${label} hub label escapes its cell`);
+    assert.ok(layout.hubMetaOffset + 3 <= layout.cellHeight / 2 + 0.01, `${label} hub agent count escapes its cell`);
+    assert.ok(layout.hubMarkerRadius <= layout.hubLabelOffset, `${label} hub marker collides with its own label`);
+  }
 });
 
 test("a terminal SSE refusal is reported as a distinct closed state with recovery guidance", async () => {

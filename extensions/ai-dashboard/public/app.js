@@ -259,9 +259,9 @@ function drawTopology(layout) {
     svg.append(path);
   }
   for (const hub of layout.hubs) {
-    svg.append(svgElement("circle", { cx: hub.x, cy: hub.y, r: 18, class: "hub-ring" }));
-    svg.append(svgText(hub.x, hub.y - 28, hub.label, "hub-label"));
-    svg.append(svgText(hub.x, hub.y + 32, `${hub.count} AGENT${hub.count === 1 ? "" : "S"}`, "hub-meta"));
+    svg.append(svgElement("circle", { cx: hub.x, cy: hub.y, r: layout.hubMarkerRadius.toFixed(1), class: "hub-ring" }));
+    svg.append(svgText(hub.x, hub.y - layout.hubLabelOffset, hub.label, "hub-label"));
+    svg.append(svgText(hub.x, hub.y + layout.hubMetaOffset, hub.meta, "hub-meta"));
   }
   const sweep = svgElement("g", { id: "radar-sweep", class: "radar-sweep" });
   const sweepTip = Math.max(8, layout.center.y - Math.min(layout.width, layout.height) * 0.45);

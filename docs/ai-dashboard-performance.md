@@ -26,15 +26,15 @@ Measurements were taken on macOS arm64, Apple M4 Pro with 48 GiB RAM, Node.js 22
 
 ### Size and process behavior
 
-| Measurement | First browser implementation | Final critique pass |
-| --- | ---: | ---: |
-| public HTML/CSS/JS, uncompressed | 66,224 bytes | 67,137 bytes |
-| dry npm package, compressed | 43,131 bytes | 48.4 KiB (rounded) |
-| dry npm package, unpacked | 150,624 bytes | 165.0 KiB (rounded) |
-| server RSS after warm-up | 58,192 KiB | 61,232 KiB |
-| server CPU reported by `ps` | 0.0% | 0.0% |
+| Measurement | First browser implementation | Final critique pass | Shipped assets |
+| --- | ---: | ---: | ---: |
+| public HTML/CSS/JS, uncompressed | 66,224 bytes | 67,137 bytes | 74,120 bytes |
+| dry npm package, compressed | 43,131 bytes | 48.4 KiB (rounded) | not re-measured |
+| dry npm package, unpacked | 150,624 bytes | 165.0 KiB (rounded) | not re-measured |
+| server RSS after warm-up | 58,192 KiB | 61,232 KiB | not re-measured |
+| server CPU reported by `ps` | 0.0% | 0.0% | not re-measured |
 
-The final UI is 913 bytes larger because the critique pass added a meta description, readable-crimson token, empty-state spacing, and labeled narrow-screen ledger rows. It still remains well below the 100 KiB budget. No minifier, bundler, remote font, image, framework, or runtime package is used.
+The critique pass added 913 bytes for a meta description, readable-crimson token, empty-state spacing, and labeled narrow-screen ledger rows. The approved-fix pass added a further 6,983 bytes for the collision-free topology grid with cell-bounded hub graphics, the spanning Flowline recovery copy, the terminal stream-closed state, and window-independent history identity. The shipped total of 74,120 bytes (`index.html` 8,688 + `styles.css` 26,851 + `app.js` 29,478 + `app-core.js` 9,103, measured with `wc -c`) remains well below the 100 KiB budget. The rows marked *not re-measured* were not re-run in the approved-fix pass and are retained only as the earlier observations they were. No minifier, bundler, remote font, image, framework, or runtime package is used.
 
 RSS includes the Node process, adapter, two filesystem watchers, broker, retained ledger, and authoritative-reader invocations. The values are observations from one process after warm-up, not an allocation guarantee. The implemented 75 MiB threshold is therefore checked and reported as a reference threshold rather than encoded as a flaky CI assertion.
 
