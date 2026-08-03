@@ -35,7 +35,7 @@ docs/           stable integration contracts and dashboard operations guide
 src/            policy, routing, loop, validation, private storage, vault boundary
 extensions/     distributable Pi dashboard extension and built-in localhost UI
 bin/            standalone CLI
-scripts/        reproducible tests, generated schema enum sync, and public-safety check
+scripts/        reproducible tests, generated schema enum sync, public-safety check, dashboard dev runner
 tests/          Python workflows plus Node dashboard integration tests
 ```
 

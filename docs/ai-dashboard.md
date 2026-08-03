@@ -86,6 +86,7 @@ A request that arrives when every SSE slot is taken is refused with `503` and a 
 | server broker retention | 256 events |
 | server ledger retention | 200 events |
 | browser event history | 200 events |
+| browser acknowledgement keys | 200, in that browser's local storage |
 | simultaneous SSE clients | 32, then `503` |
 | unflushed bytes per SSE client | 1 MiB, or 10 s stalled |
 | static asset or snapshot response | 512 KiB |
