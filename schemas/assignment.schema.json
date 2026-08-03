@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChiiKang/ai-company-os/schemas/assignment.schema.json",
+  "title": "ai-company.assignment.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "created_at", "title", "requested_outcome", "role", "measurable_goal", "constraints", "composite_budget", "prior_knowledge", "approval_pregrants", "output_path", "recovery_guards"],
+  "properties": {
+    "schema_version": {"const": "ai-company.assignment.v1"},
+    "id": {"type": "string", "pattern": "^asn_[A-Za-z0-9_-]{8,64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "title": {"type": "string", "minLength": 1},
+    "requested_outcome": {"type": "string", "minLength": 1},
+    "role": {"$comment": "generated-enum:role-names", "type": "string", "enum": ["research", "project-validation", "idea-validation", "builder"]},
+    "workflow": {"$comment": "generated-enum:workflow-names", "type": "string", "enum": ["project-validation-to-builder", "research-to-idea-validation", "research-to-project-validation"]},
+    "measurable_goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "metric", "target", "success_criteria"],
+      "properties": {
+        "statement": {"type": "string", "minLength": 1},
+        "metric": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "success_criteria": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "constraints": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "composite_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role_wall_clock_minutes", "wall_clock_minutes", "model_tokens", "monetary_cost_usd", "tool_calls", "download_bytes", "max_iterations_per_role", "unknown_usage_policy"],
+      "properties": {
+        "role_wall_clock_minutes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "research": {"type": "integer", "minimum": 1},
+            "project-validation": {"type": "integer", "minimum": 1},
+            "idea-validation": {"type": "integer", "minimum": 1},
+            "builder": {"type": "integer", "minimum": 1}
+          }
+        },
+        "wall_clock_minutes": {"type": "integer", "minimum": 1},
+        "model_tokens": {"type": "integer", "minimum": 1},
+        "monetary_cost_usd": {"type": "number", "minimum": 0},
+        "tool_calls": {"type": "integer", "minimum": 1},
+        "download_bytes": {"type": "integer", "minimum": 0},
+        "max_iterations_per_role": {"type": "integer", "minimum": 1, "maximum": 100},
+        "unknown_usage_policy": {"const": "stop"},
+        "builder_plan_approval_id": {"type": "string", "minLength": 1},
+        "spending_approval_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "prior_knowledge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "references", "max_results"],
+      "properties": {
+        "query": {"type": "string", "minLength": 1},
+        "references": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^local://[A-Za-z0-9_./#-]+$"}},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 10}
+      }
+    },
+    "approval_pregrants": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "approval_id", "scope"],
+        "properties": {
+          "operation": {"enum": ["paid-api", "cloud-resource", "large-download", "protected-credential", "security-sensitive", "destructive", "production-deployment", "unrequested-product-construction", "experiment-network"]},
+          "approval_id": {"type": "string", "minLength": 1},
+          "scope": {"type": "string", "minLength": 1},
+          "max_cost_usd": {"type": "number", "minimum": 0},
+          "max_download_bytes": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "output_path": {"type": "string", "pattern": "^outputs/asn_[A-Za-z0-9_-]{8,64}$"},
+    "recovery_guards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_identity", "environment_identity", "artifact_refs"],
+      "properties": {
+        "source_identity": {"type": "string", "minLength": 1},
+        "environment_identity": {"type": "string", "minLength": 1},
+        "artifact_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+# Project-local Python tooling
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.coverage
+
+# Credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Private AI Company OS knowledge (the CLI also rejects in-repo roots)
+.ai-company-os/
+.ai-company-os-private
+knowledge/
+private/
+reports/
+assignments/
+runs/
+artifacts/
+*.private.md
+*.private.json

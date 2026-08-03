@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChiiKang/ai-company-os/schemas/experiment.schema.json",
+  "title": "Reproducible validation experiment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "assignment_id", "run_id", "created_at", "claim_ids", "goal", "feasibility_precheck", "attempted", "environment", "baseline", "disconfirming_tests", "evidence_refs", "raw_evidence_paths", "cost", "practical_assessment", "safety_mode", "verdict"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^exp_[A-Za-z0-9_-]{8,64}$"},
+    "assignment_id": {"type": "string", "pattern": "^asn_[A-Za-z0-9_-]{8,64}$"},
+    "run_id": {"type": "string", "pattern": "^run_[A-Za-z0-9_-]{8,64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "claim_ids": {"type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": {"type": "string", "pattern": "^claim_[A-Za-z0-9_-]{4,64}$"}},
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "target", "success_condition"],
+      "properties": {
+        "metric": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "success_condition": {"type": "string", "minLength": 1}
+      }
+    },
+    "feasibility_precheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "rationale", "blocking_evidence"],
+      "properties": {
+        "status": {"enum": ["feasible", "not feasible", "approval required"]},
+        "rationale": {"type": "string", "minLength": 1},
+        "blocking_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "attempted": {"type": "boolean"},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isolation", "runtime", "source_uri", "source_revision", "source_sha256", "original_source_unchanged", "setup_commands", "reproduction_commands"],
+      "properties": {
+        "isolation": {"enum": ["docker", "virtual-environment", "project-local", "simulator", "literature-only"]},
+        "runtime": {"type": "string", "minLength": 1},
+        "source_uri": {"type": "string", "format": "uri"},
+        "source_revision": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+        "original_source_unchanged": {"const": true},
+        "setup_commands": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "reproduction_commands": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "result"],
+      "properties": {
+        "method": {"type": "string", "minLength": 1},
+        "result": {"type": "string", "minLength": 1}
+      }
+    },
+    "disconfirming_tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hypothesis", "command", "result"],
+        "properties": {
+          "hypothesis": {"type": "string", "minLength": 1},
+          "command": {"type": "string", "minLength": 1},
+          "result": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "raw_evidence_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(?!/)(?!.*\\.\\.).+"}},
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "amount", "compute_hours", "reliability_notes"],
+      "properties": {
+        "currency": {"const": "USD"},
+        "amount": {"type": "number", "minimum": 0},
+        "compute_hours": {"type": "number", "minimum": 0},
+        "reliability_notes": {"type": "string", "minLength": 1}
+      }
+    },
+    "practical_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usefulness", "operational_complexity", "limitations"],
+      "properties": {
+        "usefulness": {"type": "string", "minLength": 1},
+        "operational_complexity": {"type": "string", "minLength": 1},
+        "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "safety_mode": {"enum": ["literature", "simulation", "public-data", "safe-software"]},
+    "verdict": {"enum": ["confirmed", "partially confirmed", "contradicted", "could not attempt", "could not reproduce", "works but impractical", "promising but more evidence required"]}
+  }
+}
