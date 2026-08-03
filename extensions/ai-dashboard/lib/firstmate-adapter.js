@@ -342,7 +342,8 @@ export function parseStatusLine(id, line, observedAt, ordinal = 0) {
   const note = sanitizeText(match[3], 200);
   if (!note) return null;
   return {
-    key: `${id}:${ordinal}:${createHash("sha1").update(line).digest("hex").slice(0, 10)}`,
+    fingerprint: createHash("sha1").update(line).digest("hex").slice(0, 16),
+    ordinal,
     taskId: id,
     source: id.toUpperCase(),
     verb,

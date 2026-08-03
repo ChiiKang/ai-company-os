@@ -1,5 +1,6 @@
 import {
   BROWSER_EVENT_LIMIT,
+  STREAM_CLOSED_COPY,
   ackKey,
   appendBoundedEvent,
   bridgeFailedFor,
@@ -69,6 +70,8 @@ let source;
 let radarFrame = null;
 let radarAngle = 0;
 let radarLastFrame = 0;
+let resizeFrame = null;
+let topologyResizeObserver = null;
 
 setupInteractions();
 applyMotionMode();
@@ -78,7 +81,11 @@ function connectStream() {
   setTransport("connecting");
   source = new EventSource("/events");
   source.onopen = () => setTransport("live");
-  source.onerror = () => setTransport("reconnecting");
+  source.onerror = () => {
+    const terminal = source.readyState === EventSource.CLOSED;
+    setTransport(terminal ? "closed" : "reconnecting");
+    if (terminal) render();
+  };
   source.onmessage = (message) => {
     let event;
     try { event = JSON.parse(message.data); } catch { return; }
@@ -132,12 +139,20 @@ function render() {
 
 function renderModeState() {
   const phase = model.snapshot?.phase ?? "loading";
+  if (model.transport === "closed") {
+    renderFailure(STREAM_CLOSED_COPY.title, STREAM_CLOSED_COPY.description, "error");
+    return;
+  }
   if (phase === "loading") {
     renderLoading();
     return;
   }
   if (["unavailable", "error"].includes(phase)) {
-    renderFailure();
+    renderFailure(
+      model.snapshot?.error || "The local fleet bridge is unavailable.",
+      model.snapshot?.resolutionHint || "Check the Firstmate home and authoritative reader configuration, then reload this page.",
+      phase,
+    );
     return;
   }
   if (model.mode === "flowline") renderFlowline();
@@ -155,9 +170,7 @@ function renderLoading() {
   setLedgerEmpty(ledgerEmptyCopy({ phase: "loading" }));
 }
 
-function renderFailure() {
-  const message = model.snapshot?.error || "The local fleet bridge is unavailable.";
-  const hint = model.snapshot?.resolutionHint || "Check the Firstmate home and authoritative reader configuration, then reload this page.";
+function renderFailure(message, hint, phase) {
   elements.flowline.replaceChildren(stateMessage(message, hint));
   elements.roster.replaceChildren(stateMessage("Agent roster unavailable", hint, "state-message compact"));
   elements.topologySvg.replaceChildren(svgTitle("Live fleet workstream topology"), svgDescription("Topology unavailable until the local bridge reconnects."));
@@ -166,7 +179,7 @@ function renderFailure() {
   elements.topologyEmpty.textContent = "Topology unavailable.";
   elements.eventBody.replaceChildren();
   elements.ledgerEmpty.hidden = false;
-  setLedgerEmpty(ledgerEmptyCopy({ phase: model.snapshot?.phase ?? "error", hint }));
+  setLedgerEmpty(ledgerEmptyCopy({ phase: phase ?? "error", hint }));
 }
 
 function renderFlowline() {
@@ -217,13 +230,21 @@ function renderOperations() {
     ? tasks.map((task) => taskButton(task, "agent-row"))
     : [stateMessage("No agents match", "Clear the filter to restore the whole-company roster.", "state-message compact")]));
 
-  const layout = topologyLayout(tasks);
+  const layout = topologyLayout(tasks, topologyViewport());
   elements.topologyReadout.textContent = `${layout.hubs.length} workstream${layout.hubs.length === 1 ? "" : "s"}${layout.omittedAgents ? ` / ${layout.omittedAgents} bounded` : ""}`;
   drawTopology(layout);
 }
 
+function topologyViewport() {
+  const box = elements.topology.getBoundingClientRect();
+  return { width: box.width || 760, height: box.height || 520 };
+}
+
 function drawTopology(layout) {
   const svg = elements.topologySvg;
+  svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
+  elements.topologyNodes.style.setProperty("--node-w", `${layout.nodeWidth.toFixed(1)}px`);
+  elements.topologyNodes.style.setProperty("--node-h", `${layout.nodeHeight.toFixed(1)}px`);
   svg.replaceChildren(svgTitle("Live fleet workstream topology"), svgDescription("Agents connected to their actual project or workstream hubs."));
   drawRadarGeometry(svg, layout);
   elements.topologyNodes.replaceChildren();
@@ -239,12 +260,14 @@ function drawTopology(layout) {
   }
   for (const hub of layout.hubs) {
     svg.append(svgElement("circle", { cx: hub.x, cy: hub.y, r: 18, class: "hub-ring" }));
-    svg.append(svgText(hub.x, hub.y - 28, hub.name.toUpperCase(), "hub-label"));
+    svg.append(svgText(hub.x, hub.y - 28, hub.label, "hub-label"));
     svg.append(svgText(hub.x, hub.y + 32, `${hub.count} AGENT${hub.count === 1 ? "" : "S"}`, "hub-meta"));
   }
   const sweep = svgElement("g", { id: "radar-sweep", class: "radar-sweep" });
-  sweep.append(svgElement("line", { x1: layout.center.x, y1: layout.center.y, x2: layout.center.x, y2: 48, class: "sweep-line" }));
-  sweep.append(svgElement("circle", { cx: layout.center.x, cy: 48, r: 2.5, class: "sweep-tip" }));
+  const sweepTip = Math.max(8, layout.center.y - Math.min(layout.width, layout.height) * 0.45);
+  sweep.style.transformOrigin = `${layout.center.x}px ${layout.center.y}px`;
+  sweep.append(svgElement("line", { x1: layout.center.x, y1: layout.center.y, x2: layout.center.x, y2: sweepTip.toFixed(1), class: "sweep-line" }));
+  sweep.append(svgElement("circle", { cx: layout.center.x, cy: sweepTip.toFixed(1), r: 2.5, class: "sweep-tip" }));
   svg.append(sweep);
 
   for (const node of layout.nodes) {
@@ -267,11 +290,12 @@ function drawTopology(layout) {
 
 function drawRadarGeometry(svg, layout) {
   const { x, y } = layout.center;
-  for (const radius of [58, 118, 178, 232]) svg.append(svgElement("circle", { cx: x, cy: y, r: radius, class: "radar-ring" }));
+  const reach = Math.min(layout.width, layout.height) / 2;
+  for (const scale of [0.22, 0.45, 0.68, 0.89]) svg.append(svgElement("circle", { cx: x, cy: y, r: (reach * scale).toFixed(1), class: "radar-ring" }));
   svg.append(svgElement("line", { x1: x, y1: 28, x2: x, y2: layout.height - 28, class: "radar-axis" }));
   svg.append(svgElement("line", { x1: 48, y1: y, x2: layout.width - 48, y2: y, class: "radar-axis" }));
-  svg.append(svgElement("line", { x1: 118, y1: 68, x2: layout.width - 118, y2: layout.height - 68, class: "radar-axis faint" }));
-  svg.append(svgElement("line", { x1: layout.width - 118, y1: 68, x2: 118, y2: layout.height - 68, class: "radar-axis faint" }));
+  svg.append(svgElement("line", { x1: x - reach * 0.7, y1: y - reach * 0.7, x2: x + reach * 0.7, y2: y + reach * 0.7, class: "radar-axis faint" }));
+  svg.append(svgElement("line", { x1: x + reach * 0.7, y1: y - reach * 0.7, x2: x - reach * 0.7, y2: y + reach * 0.7, class: "radar-axis faint" }));
   svg.append(svgText(28, 34, "LOCAL FLOW MAP / LIVE", "axis-label start"));
   svg.append(svgText(layout.width - 28, layout.height - 24, `${layout.nodes.length} NODES / ${layout.hubs.length} HUBS`, "axis-label end"));
 }
@@ -403,10 +427,26 @@ function setupInteractions() {
     document.body.dataset.hidden = String(document.hidden);
     updateRadarState();
   });
+  observeTopologySize();
   window.addEventListener("pagehide", () => {
     source?.close();
+    topologyResizeObserver?.disconnect();
     stopRadar();
+    if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+    resizeFrame = null;
   }, { once: true });
+}
+
+function observeTopologySize() {
+  if (typeof ResizeObserver !== "function") return;
+  topologyResizeObserver = new ResizeObserver(() => {
+    if (model.mode !== "operations" || resizeFrame !== null) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null;
+      if (model.mode === "operations") renderModeState();
+    });
+  });
+  topologyResizeObserver.observe(elements.topology);
 }
 
 function setMode(mode) {

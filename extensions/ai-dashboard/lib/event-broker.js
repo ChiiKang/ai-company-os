@@ -101,12 +101,6 @@ export class EventBroker {
     this.clients.delete(client);
   }
 
-  replayAfter(lastEventId) {
-    const id = Number.parseInt(String(lastEventId), 10);
-    if (!Number.isFinite(id)) return [];
-    return this.events.filter((event) => event.id > id);
-  }
-
   snapshotStats() {
     return {
       retained: this.events.length,

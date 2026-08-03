@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { appendFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { Writable } from "node:stream";
 import test from "node:test";
 import { EventBroker } from "../../extensions/ai-dashboard/lib/event-broker.js";
@@ -262,7 +264,6 @@ test("a failed initial reconcile still treats the first successful inventory as 
     assert.deepEqual([...bridge.tasks.keys()], ["alpha-task"]);
     const alpha = bridge.tasks.get("alpha-task");
     assert.equal(alpha.newAgent, false, "a pre-existing agent must not be marked new after a failed first reconcile");
-    assert.equal(alpha.firstSeenAfterBridgeStart, false);
     assert.equal(alpha.joiningUntil, 0);
     assert.equal(
       broker.events.some((event) => event.type === "task.spawned"),
@@ -283,9 +284,77 @@ test("a failed initial reconcile still treats the first successful inventory as 
     }, { message: "post-baseline spawn" });
     const beta = bridge.tasks.get("beta-task");
     assert.equal(beta.newAgent, true, "a genuinely new agent must stay visible after the baseline");
-    assert.equal(beta.firstSeenAfterBridgeStart, true);
     assert.ok(beta.joiningUntil > 0);
     assert.ok(broker.events.some((event) => event.type === "task.spawned" && event.payload?.task?.id === "beta-task"));
+  } finally {
+    bridge.close();
+    broker.close();
+    await fixture.cleanup();
+  }
+});
+
+test("status history stays chronological and is never republished when the tail window shifts", async () => {
+  const fixture = await createFirstmateFixture("history-window");
+  const statusPath = path.join(fixture.stateDir, "alpha-task.status");
+  await writeFile(statusPath, `${Array.from({ length: 12 }, (_, index) => `working: history ${index}`).join("\n")}\n`);
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000, maxStatusLines: 12 });
+  const broker = new EventBroker({ retention: 128, heartbeatMs: 60_000 });
+  const bridge = new FleetBridge({ adapter, broker, reconcileMs: 60_000 });
+
+  try {
+    await bridge.reconcile("initial");
+    const imported = bridge.ledger.filter((event) => event.type === "history.event");
+    assert.deepEqual(
+      imported.map((event) => event.message),
+      Array.from({ length: 12 }, (_, index) => `history ${index}`),
+      "the imported window must stay in file order, not lexicographic key order",
+    );
+    assert.equal(bridge.snapshot().ledger[0].message, "history 11", "the newest observation must be first");
+    assert.equal(broker.events.some((event) => event.type === "history.event"), false);
+
+    await appendFile(statusPath, "working: history 12\n");
+    await bridge.reconcile("full");
+
+    const published = broker.events.filter((event) => event.type === "history.event");
+    assert.deepEqual(published.map((event) => event.payload.event.message), ["history 12"], "a shifted tail window must publish only the appended line");
+    const keys = bridge.ledger.map((event) => event.key);
+    assert.equal(new Set(keys).size, keys.length, "the ledger must never hold duplicate event keys");
+    assert.equal(bridge.snapshot().ledger[0].message, "history 12");
+
+    await bridge.reconcile("full");
+    assert.equal(broker.events.filter((event) => event.type === "history.event").length, 1, "an unchanged status file must publish nothing");
+  } finally {
+    bridge.close();
+    broker.close();
+    await fixture.cleanup();
+  }
+});
+
+test("an acknowledged agent keeps its identity when a task record degrades", async () => {
+  const fixture = await createFirstmateFixture("ack-stability");
+  const resolution = await resolveFirstmateIntegration({ fmHome: fixture.home, firstmateRoot: fixture.root, cwd: fixture.home, env: { PATH: process.env.PATH } });
+  const adapter = new FirstmateAdapter(resolution, { stateTimeoutMs: 1_000 });
+  const broker = new EventBroker({ retention: 32, heartbeatMs: 60_000 });
+  const bridge = new FleetBridge({ adapter, broker, reconcileMs: 60_000 });
+
+  try {
+    await bridge.reconcile("initial");
+    const firstSeenAt = bridge.tasks.get("alpha-task").firstSeenAt;
+    assert.ok(firstSeenAt);
+
+    const readInventory = adapter.readInventory.bind(adapter);
+    adapter.readInventory = async () => {
+      const inventory = await readInventory();
+      return {
+        ...inventory,
+        tasks: inventory.tasks.map((task) => ({ ...task, firstSeenAt: new Date(Date.now() + 60_000).toISOString(), detail: "The local task record could not be read safely." })),
+      };
+    };
+
+    await bridge.reconcile("periodic");
+    assert.equal(bridge.tasks.get("alpha-task").firstSeenAt, firstSeenAt, "a degraded read must not reset the acknowledgement identity");
+    assert.equal(bridge.snapshot().tasks.find((task) => task.id === "alpha-task").firstSeenAt, firstSeenAt);
   } finally {
     bridge.close();
     broker.close();

@@ -89,7 +89,7 @@ A request that arrives when every SSE slot is taken is refused with `503` and a 
 | simultaneous SSE clients | 32, then `503` |
 | unflushed bytes per SSE client | 1 MiB, or 10 s stalled |
 | static asset or snapshot response | 512 KiB |
-| topology nodes | 32 visible, with an omitted count |
+| topology nodes | up to 32, and never more than the collision-free cells the current viewport fits, with an omitted count |
 | topology workstream hubs | 8 direct plus one bounded overflow hub |
 | radar updates | at most 12 per second |
 
@@ -116,4 +116,5 @@ Common failures:
 - **Unavailable integration:** set `FM_HOME`; set `FM_ROOT_OVERRIDE` too if the code root is split.
 - **Port already in use:** stop the unrelated local service or select `AI_DASHBOARD_PORT`. The dashboard will not silently reuse it.
 - **Reconnecting:** verify the Pi session is still running. EventSource reconnects without a panel polling loop.
+- **Stream closed:** the stream was refused or terminated and will not retry. Close another dashboard tab, then reload the page.
 - **No records:** verify the selected operational home contains `state/` and `data/backlog.md`; an empty fleet is a valid state.

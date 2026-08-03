@@ -149,6 +149,7 @@ button:active { transform: scale(.985); }
 .connection-state[data-state="live"] i { background: currentColor; }
 .connection-state[data-state="connecting"], .connection-state[data-state="reconnecting"] { color: var(--steel); }
 .connection-state[data-state="error"] { color: var(--amber); }
+.connection-state[data-state="closed"] { color: var(--crimson-text); border-color: var(--crimson-dim); }
 .instrument-button {
   min-height: 40px;
   padding: 8px 9px;
@@ -257,6 +258,7 @@ button:active { transform: scale(.985); }
 .panel-intro p { max-width: 70ch; margin: 0; color: var(--text-2); font-size: .84rem; }
 
 .flowline-board { min-width: 0; display: grid; }
+.flowline-board > .state-message, .flowline-board > .loading-state { grid-column: 1 / -1; }
 .flow-column { min-width: 0; border-bottom: 1px solid var(--line); }
 .flow-column > header {
   min-height: 60px;
@@ -380,7 +382,6 @@ button:active { transform: scale(.985); }
 .hub-meta { font-size: 8px; }
 .route-line { fill: none; stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 4 6; opacity: .62; }
 .hub-ring { fill: var(--ink-1); stroke: var(--text-2); stroke-width: 1; }
-.radar-sweep { transform-origin: 380px 260px; }
 .sweep-line { stroke: var(--crimson); stroke-width: 1; opacity: .42; }
 .sweep-tip { fill: var(--crimson); }
 .topology-nodes { position: absolute; inset: 0; z-index: 4; }
@@ -388,6 +389,8 @@ button:active { transform: scale(.985); }
   position: absolute;
   left: var(--node-x);
   top: var(--node-y);
+  width: var(--node-w, 136px);
+  height: var(--node-h, 44px);
   min-height: 44px;
   max-width: 136px;
   display: flex;
@@ -590,7 +593,7 @@ body[data-motion="static"] .map-node.new-agent .node-marker::before { opacity: .
   .flow-list { align-content: start; min-height: 100%; }
   .operations-grid { grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 360px); }
   .agent-roster { max-height: calc(100vh - 360px); }
-  .topology { min-height: calc(100vh - 420px); }
+  .topology { min-height: max(430px, calc(100vh - 420px)); }
   .ledger-scroll { max-height: calc(100vh - 330px); }
 }
 

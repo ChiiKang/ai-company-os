@@ -42,6 +42,16 @@ test("backlog and status parsers preserve tasks while treating status as history
   assert.equal(history.label, "Blocked event");
 });
 
+test("status history identity is independent of the position inside the bounded tail window", () => {
+  const line = "working: implementation underway";
+  const first = parseStatusLine("task-a", line, "2026-01-01T00:00:00Z", 0);
+  const shifted = parseStatusLine("task-a", line, "2026-01-01T00:00:01Z", 7);
+  assert.equal(first.fingerprint, shifted.fingerprint, "a shifted window must not change the identity of the same line");
+  assert.equal(first.ordinal, 0);
+  assert.equal(shifted.ordinal, 7);
+  assert.notEqual(first.fingerprint, parseStatusLine("task-a", "working: something else", "2026-01-01T00:00:00Z", 0).fingerprint);
+});
+
 test("adapter resolves FM_HOME safely, reconciles through the script, and exposes no private body", async () => {
   const fixture = await createFirstmateFixture("adapter");
   const privateReport = path.join(fixture.home, "data", "alpha-task", "report.md");

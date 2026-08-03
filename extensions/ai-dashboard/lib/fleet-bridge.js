@@ -21,6 +21,7 @@ export class FleetBridge {
     this.plans = [];
     this.ledger = [];
     this.historyByTask = new Map();
+    this.historySeq = 0;
     this.watchers = [];
     this.debounceTimer = null;
     this.reconcileTimer = null;
@@ -94,10 +95,10 @@ export class FleetBridge {
       for (const baseTask of inventory.tasks) {
         const previous = this.tasks.get(baseTask.id);
         if (previous) {
-          this.tasks.set(baseTask.id, { ...previous, ...baseTask, state: previous.state, stateLabel: previous.stateLabel, stateSource: previous.stateSource, detail: previous.detail, observedAt: previous.observedAt });
+          this.tasks.set(baseTask.id, { ...previous, ...baseTask, firstSeenAt: previous.firstSeenAt, state: previous.state, stateLabel: previous.stateLabel, stateSource: previous.stateSource, detail: previous.detail, observedAt: previous.observedAt });
         } else {
           const joiningUntil = isInitial ? 0 : Date.now() + this.joiningMs;
-          const task = { ...baseTask, joiningUntil, newAgent: !isInitial, firstSeenAfterBridgeStart: !isInitial };
+          const task = { ...baseTask, joiningUntil, newAgent: !isInitial };
           this.tasks.set(task.id, task);
           if (!isInitial) {
             this.#appendLifecycle({
@@ -212,7 +213,7 @@ export class FleetBridge {
       tasks,
       plans: this.plans.map(publicPlan),
       counts,
-      ledger: this.ledger.slice(-this.ledgerLimit).reverse(),
+      ledger: this.ledger.slice().reverse(),
       bounds: {
         browserEvents: 200,
         serverEvents: this.broker.retention,
@@ -268,9 +269,11 @@ export class FleetBridge {
     if (initial) {
       const imported = [...nextHistories.values()]
         .flat()
-        .sort((left, right) => String(left.observedAt).localeCompare(String(right.observedAt)) || left.key.localeCompare(right.key))
+        .sort((left, right) => String(left.observedAt).localeCompare(String(right.observedAt))
+          || String(left.taskId).localeCompare(String(right.taskId))
+          || (left.ordinal ?? 0) - (right.ordinal ?? 0))
         .slice(-this.ledgerLimit);
-      for (const event of imported) this.#appendLedger({ ...event, type: "history.event" }, false);
+      for (const event of imported) this.#appendLedger({ ...event, type: "history.event", key: this.#historyKey(event) }, false);
       this.historyByTask = new Map([...nextHistories].map(([id, events]) => [id, events]));
       return;
     }
@@ -278,9 +281,14 @@ export class FleetBridge {
     for (const [id, next] of nextHistories) {
       const previous = this.historyByTask.get(id) ?? [];
       const additions = appendedHistory(previous, next);
-      for (const event of additions) this.#appendLedger({ ...event, type: "history.event" }, true);
+      for (const event of additions) this.#appendLedger({ ...event, type: "history.event", key: this.#historyKey(event) }, true);
       this.historyByTask.set(id, next);
     }
+  }
+
+  #historyKey(event) {
+    this.historySeq += 1;
+    return `${event.taskId}:${this.historySeq}:${event.fingerprint ?? "unknown"}`;
   }
 
   #appendLifecycle(event, task) {
@@ -386,7 +394,7 @@ function appendedHistory(previous, next) {
 }
 
 function sameEvents(left, right) {
-  return left.length === right.length && left.every((event, index) => event.key === right[index]?.key);
+  return left.length === right.length && left.every((event, index) => event.fingerprint === right[index]?.fingerprint);
 }
 
 function idFromFilename(filename) {

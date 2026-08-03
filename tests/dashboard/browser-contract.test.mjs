@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BROWSER_EVENT_LIMIT,
   DEFAULT_LEDGER_EMPTY,
+  STREAM_CLOSED_COPY,
   ackKey,
   appendBoundedEvent,
   bridgeFailedFor,
@@ -41,6 +42,49 @@ test("Flowline, filters, and topology are derived from actual fleet records", ()
   assert.deepEqual(layout.hubs.map((hub) => hub.name).sort(), ["Alpha", "Beta"]);
   assert.equal(layout.nodes.length, 3);
   assert.equal(layout.routes.length, 3);
+});
+
+test("agents sharing one workstream stay non-overlapping at narrow, tablet, and wide sizes", () => {
+  const tasks = Array.from({ length: 14 }, (_, index) => ({
+    id: `agent-${index}`,
+    agentName: `AGENT-${index}`,
+    title: "Shared workstream delivery",
+    workstream: "Shared platform workstream",
+    state: "working",
+    displayState: "working",
+  }));
+
+  for (const viewport of [{ width: 328, height: 470 }, { width: 620, height: 600 }, { width: 980, height: 560 }]) {
+    const label = `${viewport.width}x${viewport.height}`;
+    const layout = topologyLayout(tasks, viewport);
+    assert.ok(layout.nodes.length > 0, `${label} must place at least one agent`);
+    assert.equal(layout.nodes.length + layout.omittedAgents, tasks.length, `${label} must account for every agent`);
+    assert.ok(layout.nodeHeight >= 56, `${label} must fit the agent name, state, and NEW label without spilling`);
+
+    for (const [index, node] of layout.nodes.entries()) {
+      assert.ok(node.x - layout.nodeWidth / 2 >= -0.01 && node.x + layout.nodeWidth / 2 <= layout.width + 0.01, `${label} node ${index} left the board`);
+      assert.ok(node.y - layout.nodeHeight / 2 >= -0.01 && node.y + layout.nodeHeight / 2 <= layout.height + 0.01, `${label} node ${index} left the board`);
+      for (const other of layout.nodes.slice(index + 1)) {
+        const overlaps = Math.abs(node.x - other.x) < layout.nodeWidth - 0.01 && Math.abs(node.y - other.y) < layout.nodeHeight - 0.01;
+        assert.equal(overlaps, false, `${label} labels for ${node.task.id} and ${other.task.id} overlap`);
+      }
+    }
+  }
+
+  const crowded = topologyLayout(tasks, { width: 328, height: 470 });
+  assert.ok(crowded.hubs[0].label.length <= crowded.hubs[0].name.length, "hub labels must stay bounded to their arc");
+});
+
+test("a terminal SSE refusal is reported as a distinct closed state with recovery guidance", async () => {
+  assert.deepEqual(connectionReadout({ transport: "closed", bridgeFailed: false }), { state: "closed", label: "Stream closed" });
+  assert.deepEqual(connectionReadout({ transport: "closed", bridgeFailed: true }), { state: "closed", label: "Stream closed" });
+  assert.match(STREAM_CLOSED_COPY.description, /reload this page/i);
+
+  const app = await readFile(appUrl, "utf8");
+  assert.match(app, /source\.readyState === EventSource\.CLOSED/);
+  assert.match(app, /renderFailure\(STREAM_CLOSED_COPY\.title, STREAM_CLOSED_COPY\.description/);
+  const css = await readFile(cssUrl, "utf8");
+  assert.match(css, /\.connection-state\[data-state="closed"\]/);
 });
 
 test("radar liveness stops for static, reduced-motion, hidden, and non-topology views", () => {
@@ -122,6 +166,8 @@ test("responsive, contrast-support, and reduced-motion CSS contracts cover narro
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /@media \(forced-colors: active\)/);
   assert.match(css, /@media \(pointer: coarse\)/);
+  assert.match(css, /\.flowline-board > \.state-message[^{]*\{[^}]*grid-column: 1 \/ -1/, "unavailable and error recovery copy must span the whole Flowline board");
+  assert.match(css, /\.flowline-board > \.state-message, \.flowline-board > \.loading-state/, "loading copy must span the board on every breakpoint");
   assert.doesNotMatch(css, /gradient\(/i);
   assert.doesNotMatch(css, /#000(?:000)?\b|#fff(?:fff)?\b/i);
   assert.doesNotMatch(css, /transition:[^;]*(?:width|height|top|left|margin)/i);
