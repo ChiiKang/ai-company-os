@@ -47,8 +47,9 @@
 /* Mobile */
 .topbar { display: none; }
 @media (max-width: 760px) {
+  .shell { flex-direction: column; }
   .rail { display: none; }
-  .topbar { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 30; padding: 10px 12px; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-subtle); }
+  .topbar { display: flex; width: 100%; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 30; padding: 10px 12px; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-subtle); }
   .topbar-title { font-weight: 600; font-size: 14px; }
   .menu { width: calc(100vw - 24px); }
 }
