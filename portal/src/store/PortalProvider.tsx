@@ -82,7 +82,7 @@ const INITIAL: PortalState = {
   threads: {},
 };
 
-const VERSION = 2;
+const VERSION = 3;
 
 export function PortalProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PortalState>(() => load(INITIAL, VERSION));

@@ -400,7 +400,7 @@ export const WALLET: WalletState = {
   paymentMethod: { brand: "visa", last4: "6248" },
   creditsUsd: 139.22,
   usdcBalance: 0,
-  advancedMode: false,
+  advancedMode: true,
   autoReload: { enabled: false, thresholdUsd: 25, amountUsd: 100 },
   transactions: [
     { id: "t1", at: daysAgo(0, 6), kind: "usage", description: "Cancel Recovery · David Chen (1 call, 1 SMS, 1 email)", amount: -1.84, currency: "USD" },

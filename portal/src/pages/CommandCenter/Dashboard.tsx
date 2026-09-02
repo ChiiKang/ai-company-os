@@ -74,7 +74,7 @@ function StatTile({ stat, range }: { stat: StatSeries; range: StatRange }) {
 
 export function PerformanceDashboard() {
   const { getStats } = usePortalActions();
-  const [range, setRange] = useState<StatRange>("today");
+  const [range, setRange] = useState<StatRange>("all");
   const [from, setFrom] = useState("2026-08-01");
   const [to, setTo] = useState("2026-09-01");
   const stats = getStats(range);
