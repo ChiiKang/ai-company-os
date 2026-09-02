@@ -8,6 +8,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Captain assignments, reports, experiments, and decisions belong only in the external knowledge root. The authoritative privacy and integration boundaries are in `README.md` and `docs/firstmate-integration-v1.md`.
 - Independent role routing is the default. Only an explicitly selected workflow may contain multiple roles, and every load-bearing handoff claim remains evidence-, confidence-, and scope-gated.
 - Runs begin with bounded deterministic lexical metadata retrieval and use composite usage accounting plus atomic checkpoints; see `procedures/resource-and-recovery.md`.
+- `portal/` is the EnergyEngine.ai user portal (Vite + React + TypeScript, self-contained, its own `package.json`); `portal/README.md` is the authoritative guide. Its frozen contracts are `portal/src/types.ts`, the store, `portal/src/api/agent.ts`, and the route map in `portal/src/App.tsx`; change a contract in one place, then update consumers. Verify with `cd portal && npm run build`.
 - Treat cloned code/dependencies as hostile and validate the offline sandbox envelope in `procedures/untrusted-code.md`.
 
 ## Maintaining this file
