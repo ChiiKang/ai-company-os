@@ -1,37 +1,47 @@
 /* EnergyEngine.ai portal design tokens.
-   Dark is the primary theme (deep navy starfield, indigo accent).
-   Light keeps the existing warm cream Settings palette (terracotta accent). */
+   Brand kit 2026: Terminal Black #231f20 · Bright White #ffffff · Deep Navy #13245c ·
+   Blue Ocean #0c68f0 · Teal Shores #00c0f3 · Inter + Roboto Mono.
+   Dark is the primary theme (black star wallpaper, Blue Ocean accent).
+   Light keeps the warm cream Settings palette (terracotta accent). */
+
+:root {
+  --brand-black: #231f20;
+  --brand-white: #ffffff;
+  --brand-navy: #13245c;
+  --brand-blue: #0c68f0;
+  --brand-teal: #00c0f3;
+}
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces */
-  --bg: #05070f;
-  --bg-elevated: #0a0e1c;
-  --surface: rgba(13, 17, 33, 0.82);
-  --surface-solid: #0d1121;
-  --surface-2: #121732;
-  --surface-3: #171d3d;
-  --overlay: rgba(3, 5, 12, 0.72);
+  /* Surfaces: the black wallpaper with stars */
+  --bg: #050506;
+  --bg-elevated: #0b0b0e;
+  --surface: rgba(15, 16, 22, 0.82);
+  --surface-solid: #0f1016;
+  --surface-2: #15171f;
+  --surface-3: #1c1f2a;
+  --overlay: rgba(2, 3, 6, 0.74);
 
   /* Lines */
-  --border: rgba(148, 163, 255, 0.14);
-  --border-strong: rgba(148, 163, 255, 0.28);
+  --border: rgba(150, 175, 235, 0.14);
+  --border-strong: rgba(150, 175, 235, 0.28);
   --border-subtle: rgba(255, 255, 255, 0.06);
 
   /* Text */
-  --text: #e8eaf6;
-  --text-2: #aab0cc;
-  --text-3: #6f7597;
-  --text-inverse: #05070f;
+  --text: #f2f3f7;
+  --text-2: #aab0c2;
+  --text-3: #6d7388;
+  --text-inverse: #050506;
 
-  /* Brand / accent */
-  --accent: #5b6cff;
-  --accent-strong: #3d5bff;
-  --accent-soft: rgba(91, 108, 255, 0.16);
-  --accent-glow: rgba(91, 108, 255, 0.45);
-  --accent-text: #9aa6ff;
+  /* Brand / accent: Blue Ocean */
+  --accent: #0c68f0;
+  --accent-strong: #0a58cc;
+  --accent-soft: rgba(12, 104, 240, 0.16);
+  --accent-glow: rgba(12, 104, 240, 0.5);
+  --accent-text: #62a4ff;
   --on-accent: #ffffff;
 
   /* Semantic */
@@ -41,19 +51,21 @@
   --warning-soft: rgba(227, 179, 65, 0.14);
   --danger: #ff6b6b;
   --danger-soft: rgba(255, 107, 107, 0.14);
-  --info: #6cb4ff;
-  --info-soft: rgba(108, 180, 255, 0.14);
+  --info: #00c0f3;
+  --info-soft: rgba(0, 192, 243, 0.14);
   --usdc: #2775ca;
   --usdc-soft: rgba(39, 117, 202, 0.18);
 
   /* Effects */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-accent: 0 0 0 1px var(--border-strong), 0 0 28px rgba(91, 108, 255, 0.18);
-  --ring: 0 0 0 3px rgba(91, 108, 255, 0.35);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-accent: 0 0 0 1px var(--border-strong), 0 0 28px rgba(12, 104, 240, 0.18);
+  --ring: 0 0 0 3px rgba(12, 104, 240, 0.35);
   --star-opacity: 1;
-  --heading-font: -apple-system, "Inter", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --serif-font: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --glow-a: rgba(19, 36, 92, 0.85);
+  --glow-b: rgba(12, 104, 240, 0.16);
+  --heading-font: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif-font: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 :root[data-theme="light"] {
@@ -99,12 +111,16 @@
   --shadow-accent: 0 0 0 1px var(--border-strong), 0 0 24px rgba(217, 90, 58, 0.12);
   --ring: 0 0 0 3px rgba(217, 90, 58, 0.28);
   --star-opacity: 0;
+  --glow-a: rgba(217, 90, 58, 0.10);
+  --glow-b: rgba(12, 104, 240, 0.06);
+  --heading-font: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif-font: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 :root {
   /* Layout & type scale (theme independent) */
-  --font: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "Roboto Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;

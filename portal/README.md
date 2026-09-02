@@ -5,8 +5,11 @@ Agent Command Center that runs the five sales workflows (Generate Leads, Set App
 Generate Referrals, Recruit Talent). Everything else in the portal (Activity, Wallet, Settings, Support) exists to
 feed and observe that agent.
 
-The colour system is unchanged from the previous portal: dark navy starfield with an indigo accent, and the warm
-cream Settings palette with a terracotta accent in light mode. Both themes are first-class.
+Branding follows the EnergyEngine 2026 brand kit: the eight-bar pinwheel mark (two bars in Blue Ocean), Inter for
+all text and Roboto Mono for labels, and the palette Terminal Black, Bright White, Deep Navy, Blue Ocean, and Teal
+Shores. Dark mode is the black star wallpaper from the previous portal with a Deep Navy glow; light mode keeps the
+warm cream Settings palette. Fonts are self-hosted from the `@fontsource` packages, so nothing loads from third-party
+CDNs. Brand tokens live in `src/styles/tokens.css` (`--brand-*`) and the mark in `src/components/shell/Logo.tsx`.
 
 ## Run it
 

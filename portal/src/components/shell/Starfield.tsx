@@ -21,7 +21,7 @@ export function Starfield() {
       canvas.height = h * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       stars.length = 0;
-      const n = Math.min(160, Math.floor((w * h) / 9000));
+      const n = Math.min(220, Math.floor((w * h) / 7000));
       for (let i = 0; i < n; i++) stars.push({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.1 + 0.2, a: Math.random(), s: 0.002 + Math.random() * 0.004 });
     };
     const draw = (t: number) => {
@@ -29,7 +29,7 @@ export function Starfield() {
       for (const st of stars) {
         const tw = reduce ? 0.7 : 0.55 + 0.45 * Math.sin(t * st.s + st.a * 6.28);
         ctx.globalAlpha = 0.25 + 0.6 * tw;
-        ctx.fillStyle = "#c9d1ff";
+        ctx.fillStyle = "#e8edff";
         ctx.beginPath();
         ctx.arc(st.x, st.y, st.r, 0, 6.283);
         ctx.fill();
